@@ -96,10 +96,13 @@ class AgentZoo:
                 ) if suc else f"You are the agent for project {project_name}."
 
                 # reconstruct agent
+                model = os.environ.get("MINER_LLM_MODEL", "gpt-4o-mini")
+                logger.info(f"[AGENT] Creating agent for project {project_name} using model {model}")
+
                 agent = create_react_agent(
-                    model="openai:gpt-4o-mini",
+                    model="openai:" + model,
                     tools=tools,
-                    prompt=prompt
+                    prompt= f"You are the agent for project {project_name}."
                 )
                 logger.info(f"[AGENT] load agent, Project {project_name} - tools: {[t.name for t in tools]}, Created: {[t.name for t in created]}, Updated: {[t.name for t in updated]}, Deleted: {deleted}, with prompt: {suc}")
 

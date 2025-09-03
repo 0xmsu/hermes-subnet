@@ -31,22 +31,25 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage
 
 from common.project_manager import ProjectManager
-from common.prompt_template import SCORE_PROMPT, SYNTHETIC_PROMPT
-from common.protocol import ChatCompletionRequest, SyntheticNonStreamSynapse
-from common.utils import try_get_external_ip, get_elapse_weight
+from common.prompt_template import SCORE_PROMPT
+from common.protocol import SyntheticNonStreamSynapse
+import common.utils as utils
+from herms.validator.question_generator import question_generator
 from herms.validator.api import app
 from herms.base import BaseNeuron
 import agent.graphql_agent as subAgent
 
 
-cid = 'QmQqqmwwaBben8ncfHo3DMnDxyWFk5QcEdTmbevzKj7DBd'
+SUBQL_CID = 'QmfUNJC1Qz8m3F67sQmxrwjuSAu4WaCR1iBdPPdzBruQ7P'
 class Validator(BaseNeuron):
-    version: str = '4'
+    version: str = '5'
 
     server_agent: Any
     dendrite: bt.Dendrite
     miners: list[int] | None
     llm: ChatOpenAI | None
+    scoreLLM: ChatOpenAI | None
+    project_manager: ProjectManager | None
     hotkeys: dict[int, str]  # uid to hotkey mapping
     scores: torch.Tensor
     device: str
@@ -57,7 +60,7 @@ class Validator(BaseNeuron):
     
     def __init__(self):
         super().__init__()
-        self.miners = None
+        self.miners = []
 
         self.hotkeys = copy.deepcopy(self.settings.metagraph.hotkeys)
         self.scores = torch.zeros_like(torch.tensor(self.settings.metagraph.S), dtype=torch.float32)
@@ -68,15 +71,7 @@ class Validator(BaseNeuron):
     async def start(self):
         super().start()
 
-        current_dir = Path(__file__).parent
-        PROJECTS_DIR = current_dir.parent / "projects"
-        PROJECTS_DIR = PROJECTS_DIR / "validator"
-        self.pm = ProjectManager(PROJECTS_DIR)
-        await self.pm.pull()
-
-        self.server_agent = subAgent.initServerAgentWithConfig(self.pm.get_project(cid))
-        self.non_stream_chat_completion = subAgent.non_stream_chat_completion
-
+        await self.init_project()
 
         tasks = [
             asyncio.create_task(
@@ -90,10 +85,33 @@ class Validator(BaseNeuron):
             )
         ]
         await asyncio.gather(*tasks)
-            
+
+    async def init_project(self):
+        model_name = os.getenv("LLM_MODEL", "gpt-5")
+        self.llm = ChatOpenAI(
+            model=model_name,
+            temperature=1
+        )
+
+        score_model_name = os.getenv("SCORE_LLM_MODEL", "o3")
+        self.scoreLLM = ChatOpenAI(
+            model=score_model_name,
+            temperature=1
+        )
+        logger.info(f"Using LLM model: {model_name} for synthetic challenge")
+        logger.info(f"Using LLM model: {score_model_name} for scoring")
+
+        current_dir = Path(__file__).parent
+        project_dir = current_dir.parent / "projects" / "validator"
+        self.project_manager = ProjectManager(project_dir)
+        await self.project_manager.pull()
+
+        self.server_agent = subAgent.initServerAgentWithConfig(self.project_manager.get_project(SUBQL_CID))
+        self.non_stream_chat_completion = subAgent.non_stream_chat_completion
+
     async def serve_api(self):
         try:
-            external_ip = try_get_external_ip()
+            external_ip = utils.try_get_external_ip()
             logger.info(f"external_ip: {external_ip}")
 
             logger.info(f"Starting serve API on http://0.0.0.0:{self.settings.port}")
@@ -114,7 +132,7 @@ class Validator(BaseNeuron):
     async def refresh_miners(self):
         while True:
             miners = self.settings.miners()
-            logger.info(f"miners: {miners}")
+            # logger.info(f"miners: {miners}")
             self.miners = miners
             if miners != self.miners:
                 self.miners = miners
@@ -122,20 +140,12 @@ class Validator(BaseNeuron):
             await asyncio.sleep(30)
 
     async def loop_query(self):
-        model_name = os.getenv("LLM_MODEL", "gpt-4o-mini")
-        self.llm = ChatOpenAI(
-            model=model_name,
-            temperature=1
-        )
-        entity_schema = self.pm.get_project(cid).schema_content
-        question_prompt = SYNTHETIC_PROMPT.format(entity_schema=entity_schema)
+        entity_schema = self.project_manager.get_project(SUBQL_CID).schema_content
         await asyncio.sleep(10)
-
+    
         while True:
             # generate challenge
-            summary_response = self.llm.invoke([HumanMessage(content=question_prompt)])
-            question = summary_response.content.strip()
-
+            question = question_generator.generate_question(SUBQL_CID, entity_schema, self.llm)
             trace_id = str(uuid4())
 
             logger.info(f"\n🤖 generate sythetic challenge: {question}", traceId=trace_id)
@@ -147,7 +157,9 @@ class Validator(BaseNeuron):
                 logger.warning("Failed to generate ground truth, skipping this round.", traceId=trace_id)
                 await asyncio.sleep(60)
                 continue
-    
+
+            # TODO: check ground truth has real content
+            
             end_time = time.perf_counter()
             ground_cost = end_time - start_time
             logger.info(f"\n🤖 generate ground_truth: {ground_truth} cost: {ground_cost}s", traceId=trace_id)
@@ -164,7 +176,7 @@ class Validator(BaseNeuron):
                 )
             responses = await asyncio.gather(*tasks)
 
-            # # # score result
+            # score result
             tasks = []
             for r in responses:
                 tasks.append(
@@ -174,7 +186,10 @@ class Validator(BaseNeuron):
             truth_scores = [float(s) for s in scores]
             logger.info(f" ground_truth scores: {truth_scores}")
 
-            elapse_weights = [get_elapse_weight(r.elapsed_time) for r in responses]
+            elapse_time = [r.elapsed_time for r in responses]
+            logger.info(f" elapse_time: {elapse_time}")
+
+            elapse_weights = [utils.get_elapse_weight_quadratic(r.elapsed_time, ground_cost) for r in responses]
             logger.info(f" elapse_weights: {elapse_weights}")
 
             weighted_scores = [s * w for s, w in zip(truth_scores, elapse_weights)]
@@ -211,7 +226,7 @@ class Validator(BaseNeuron):
     async def query_miner(self, uid: int, question: str, ground_truth: str):
         try:
             start_time = time.perf_counter()
-            synapse = SyntheticNonStreamSynapse(projectId=cid, question=question)
+            synapse = SyntheticNonStreamSynapse(projectId=SUBQL_CID, question=question)
             r = await self.dendrite.forward(
                 axons=self.settings.metagraph.axons[uid],
                 synapse=synapse,
@@ -222,10 +237,10 @@ class Validator(BaseNeuron):
             synapse.response = r.response
             logger.info(f"""
 query_miner 
-  miner: {uid}, 
-  question: {question},
-  answer: {synapse.response}, 
-  ground_truth: {ground_truth}, 
+  miner: {uid}\n
+  question: {question}\n
+  answer: {synapse.response}\n
+  ground_truth: {ground_truth}\n
   cost: {end_time - start_time}s
 """)
             synapse.elapsed_time = end_time - start_time
@@ -241,7 +256,7 @@ query_miner
             miner_answer=miner_synapse.response
         )
         # logger.debug(f"Generated question prompt for get_score: {question_prompt}")
-        summary_response = self.llm.invoke([HumanMessage(content=question_prompt)])
+        summary_response = self.scoreLLM.invoke([HumanMessage(content=question_prompt)])
         logger.info(f"\n🤖 LLM get_score: {summary_response.content}")
         return summary_response.content
 

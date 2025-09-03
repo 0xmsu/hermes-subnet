@@ -1,6 +1,6 @@
 from langchain.prompts import PromptTemplate
 
-synthetic_template_V1 = """
+synthetic_challenge_template_V1 = """
 You are given the following document as background context:
 {entity_schema}
 Your task:
@@ -14,7 +14,7 @@ Your task:
 Now generate the question:
 """
 
-synthetic_template_V2 = """
+synthetic_challage_subql_V2 = """
 You are a question generator for database schema analysis.
 
 Background Context:
@@ -28,6 +28,14 @@ Available Era: 0x40, 0x48, 0x49, 0x50, 0x51 (hexadecimal)
 
 Task: Generate ONE natural question about numerical data from the schema above.
 
+Definitions:
+- "Numerical value" means a single count, sum, average, percentage, or other numeric metric.
+- Each question must involve exactly ONE metric.
+- If the output would be a list, show only the first 3 results.
+
+CRITICAL CONSTRAINT - MUST AVOID REPETITION:
+{recent_questions}
+
 Requirements:
 1. Ask about a specific numerical value, metric, or calculation
 2. Ensure the question is answerable using the provided schema
@@ -36,6 +44,14 @@ Requirements:
 5. You may reference the specific addresses above if relevant
 6. The question must specify a single era from the available list: 0x40, 0x48, 0x49, 0x50, 0x51
 7. If the answer would be a list, limit results to the first 3 items
+8. Ask for ONLY ONE metric or value - do not use "and" or "or" to combine multiple questions
+9. Each question must focus on a single data point or calculation
+10. Randomly vary between these three main topic categories with equal probability:
+    - Indexer rewards (total rewards, reward distribution, etc.)
+    - APY (Annual Percentage Yield calculations, rates, etc.) 
+    - Stake (staking amounts, stake distribution, etc.)
+11. ABSOLUTELY DO NOT generate questions that are similar to the ones listed above in CRITICAL CONSTRAINT section
+
 
 Question Examples:
 - "How many blocks did indexer 0xe60554D90AF0e84A9C3d1A8643e41e49403945a6 process in era 0x48?"
@@ -44,12 +60,14 @@ Question Examples:
 - "What percentage of indexing operations completed successfully in era 0x51?"
 - "Show me the top 3 highest transaction counts per block in era 0x40"
 
+
 Output: [Question only, no explanations]
 """
 
+
 SYNTHETIC_PROMPT = PromptTemplate(
-    input_variables=["entity_schema"],
-    template=synthetic_template_V2
+    input_variables=["entity_schema", "recent_questions"],
+    template=synthetic_challage_subql_V2
 )
 
 

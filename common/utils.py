@@ -15,20 +15,16 @@ def try_get_external_ip() -> str | None:
         logger.warning(f"Failed to get external ip: {e}")
         return None
     
+def get_elapse_weight_quadratic(elapsed_time: float, ground_truth_cost: float) -> float:
+    if elapsed_time <= 0:
+        return 1.0
+    if ground_truth_cost <= 0:
+        return 0.0
 
-# unit: seconds
-WEIGHT_CONFIG = [
-    ((0, 2), 0.5),     # [0, 2]
-    ((2, 5), 0.2),     # (2, 5]
-    ((5, 10), 0.2),    # (5, 10]
-    ((10, float("inf")), 0.1),  # (10, +∞)
-]
+    time_ratio = elapsed_time / ground_truth_cost
+    weight = 1.0 / ((1.0 + time_ratio) ** 2)
 
-def get_elapse_weight(elapsed_time: float) -> float:
-    for (low, high), weight in WEIGHT_CONFIG:
-        if low <= elapsed_time <= high:
-            return weight
-    return 0.0
+    return min(1.0, max(0.0, weight))
 
 
 async def fetch_from_ipfs(cid: str, path: str = "") -> str:
@@ -96,7 +92,6 @@ async def fetch_from_ipfs(cid: str, path: str = "") -> str:
     # If all sources fail
     raise RuntimeError(f"Failed to fetch {ipfs_path} from all IPFS sources")
 
-
 def create_system_prompt(
     domain_name: str,
     domain_capabilities: list,
@@ -134,3 +129,15 @@ IF RELATED to {domain_name} data:
 
 For missing user info (like "my rewards", "my tokens"), always ask for the specific wallet address or ID rather than fabricating data."""
 
+
+if __name__ == "__main__":
+    ground_truth_cost = 15.0
+    print(get_elapse_weight_quadratic(1, ground_truth_cost))
+    print(get_elapse_weight_quadratic(2, ground_truth_cost))
+    print(get_elapse_weight_quadratic(4, ground_truth_cost))
+    print(get_elapse_weight_quadratic(8, ground_truth_cost))
+    print(get_elapse_weight_quadratic(11, ground_truth_cost))
+    print(get_elapse_weight_quadratic(14, ground_truth_cost))
+    print(get_elapse_weight_quadratic(20, ground_truth_cost))
+    print(get_elapse_weight_quadratic(24, ground_truth_cost))
+    print(get_elapse_weight_quadratic(30, ground_truth_cost))

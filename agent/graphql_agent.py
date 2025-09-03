@@ -1,6 +1,7 @@
 import os
 import sys
 
+# TODO: improve
 sys.path.append(os.path.abspath("/Users/demon/Desktop/work/onf/subql-graphql-agent/examples"))
 from server import GraphQLAgent as ServerGraphQLAgent, ProjectConfig, stream_chat_completion, non_stream_chat_completion
 from working_example import GraphQLAgent as ExampleGraphQLAgent

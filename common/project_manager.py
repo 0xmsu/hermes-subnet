@@ -1,5 +1,3 @@
-
-
 import asyncio
 from dataclasses import asdict, dataclass
 import json
@@ -82,7 +80,7 @@ class ProjectConfig:
             ]
 
 
-ALLOWED_CID = ['QmQqqmwwaBben8ncfHo3DMnDxyWFk5QcEdTmbevzKj7DBd']
+ALLOWED_CID = []
 
 class ProjectManager:
     projects: Dict[str, Project] = {}
@@ -103,16 +101,18 @@ class ProjectManager:
             "limit": 50,
             "offset": 0,
         }
-        BOARD_SERVICE = os.environ.get('BOARD_SERVICE')
-
+        board_url = os.environ.get('BOARD_SERVICE')
+        if not board_url:
+            logger.error("BOARD_SERVICE environment variable is not set.")
+            exit(1)
         async with aiohttp.ClientSession() as session:
-            async with session.post(f"{BOARD_SERVICE}/project/list", headers=headers, json=data) as resp:
+            async with session.post(f"{board_url}/project/list", headers=headers, json=data) as resp:
                 response_data = await resp.json()
         parsed = ProjectListResponse(**response_data)
         self.projects.update({project.metadata.cid: project for project in parsed.data.data})
 
         for cid, project in self.projects.items():
-            if cid not in ALLOWED_CID:
+            if ALLOWED_CID and cid not in ALLOWED_CID:
                 logger.warning(f"Project {cid} is not in the allowed list.")
                 continue
             await self.register_project(cid, project.metadata.endpoint)
@@ -203,6 +203,7 @@ class ProjectManager:
             from langchain.schema import HumanMessage
         
             # Use provided LLM or create one with same config as GraphQLAgent
+            # TODO: improve. can't change temperature dynamiclly
             if llm is None:
                 model_name = os.getenv("LLM_MODEL", "gpt-4o-mini")
                 llm = ChatOpenAI(
