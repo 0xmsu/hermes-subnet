@@ -1,0 +1,29 @@
+# SN Hermes incentive mechanisms
+
+The `SN Hermes` incentive system consists of two primary components: the FactorScore alignment between miners and validators in synthetic challenges, and the response time weighting mechanism. The final score is derived from the comprehensive evaluation of these two factors.
+
+
+
+**Factual Accuracy Score**
+
+ Validators randomly generate numerical project-related challenge questions and send them to miners. The validator simultaneously produces a standard answer using its own Agent, then collects responses from miners and evaluates them using FactorScore. The scoring range spans from 0 to 10.
+
+
+
+**Elapsed Time Weight**
+
+Upon receiving miner responses, validators use their own standard answer generation time as the baseline reference. The weight decreases quadratically based on response time deviation from this benchmark.
+
+$$
+w = \frac{1}{1 + \left(\frac{\text{elapsed\_time}}{\text{ground\_truth\_cost}}\right)^2}
+$$
+
+
+
+**Final Score Calculation**
+
+Final Score = FactorScore × Elapsed Time Weight
+
+$$
+\text{Final Score} = \text{FactorScore} \times \text{Elapsed Time Weight}
+$$
