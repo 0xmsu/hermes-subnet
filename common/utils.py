@@ -1,8 +1,53 @@
 import os
+import logging
+import sys
 import httpx
 from loguru import logger
 import netaddr
 import requests
+
+
+class InterceptHandler(logging.Handler):
+    """Intercept standard library logging and redirect to loguru."""
+    
+    def emit(self, record: logging.LogRecord) -> None:
+        # Get corresponding Loguru level if it exists
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Find caller from where originated the logged message
+        frame, depth = sys._getframe(6), 6
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+
+def configure_loguru():
+    """
+    Configure loguru to intercept standard logging and suppress noisy third-party libraries.
+    """
+    # Remove default loguru handler and add custom one
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        level="INFO",
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+    )
+    
+    # Intercept standard library logging
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+    
+    # Configure specific loggers to reduce noise
+    logging.getLogger("httpx").setLevel(logging.ERROR)
+    logging.getLogger("urllib3").setLevel(logging.WARNING) 
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    
+    logger.info("Configured loguru with standard library interception")
 
 
 def try_get_external_ip() -> str | None:

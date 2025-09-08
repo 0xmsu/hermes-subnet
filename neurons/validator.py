@@ -60,6 +60,10 @@ class Validator(BaseNeuron):
     
     def __init__(self):
         super().__init__()
+        
+        # Configure loguru to intercept and control third-party logging
+        utils.configure_loguru()
+        
         self.miners = []
 
         self.hotkeys = copy.deepcopy(self.settings.metagraph.hotkeys)
@@ -276,7 +280,7 @@ query_miner
             processed_weights,
         ) = bt.utils.weight_utils.process_weights_for_netuid(
                 uids = np.array(self.settings.metagraph.uids, dtype=np.int64),
-                weights = np.array(raw_weights, dtype=np.float32),
+                weights = raw_weights.detach().cpu().numpy().astype(np.float32),
                 netuid=self.settings.netuid,
                 subtensor=self.settings.subtensor,
                 metagraph=self.settings.metagraph,

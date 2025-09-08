@@ -4,9 +4,14 @@
     - [Python environment with required dependencies](#python-environment-with-required-dependencies)
     - [Bittensor wallet](#bittensor-wallet)
   - [Running a Miner](#running-a-miner)
-- [How Miners Optimize Themselves](#how-miners-optimize-themselves)
-  - [Before Optimize](#before-optimize)
-  - [Optimize Guide](#optimize-guide)
+- [Optimise Miner Rewards](#optimise-miner-rewards)
+  - [Scoring Mechanism Explained](#scoring-mechanism-explained)
+  - [Primitive Approaches](#primitive-approaches)
+  - [Step by Step Guide](#step-by-step-guide)
+    - [1. Discover the project to optimise](#1-discover-the-project-to-optimise)
+    - [2. Run miner](#2-run-miner)
+    - [3. Wire tools](#3-wire-tools)
+    - [4. Put it into production and monitor](#4-put-it-into-production-and-monitor)
 
 **Note: This document applies to Bittensor Finney.**
 
@@ -14,9 +19,11 @@ If you are looking for guidance on local testing, please refer to the [local run
 
 # Miner
 
-Miners in our system are not traditional Bitcoin-style mining nodes. Instead, they operate at the foundational layer of the `SN Hermes` service chain, acting as the final destination for all service requests and forming the core infrastructure of `SN Hermes`. This role highlights the critical importance of miners within the ecosystem.
+Miners in our system are not traditional Bitcoin-style mining nodes. Instead, they operate at the foundational layer of the `SN SubQuery` service chain, acting as the final destination for all service requests and forming the core infrastructure of `SN SubQuery`. This role highlights the critical importance of miners within the ecosystem.
 
-To maximize profitability, miners are expected to be AI-driven, **continuously optimizing** both response speed and factual accuracy. In doing so, they can achieve sustained and optimal revenue streams.
+In `SN SubQuery`, miners are rewarded based on their performance in responding to synthetic challenges. To maximize profitability, miners are expected to engage in **continuously optimizing** response speed while keeping high factual accuracy.
+
+If you are familiar to bittensor subnet set up already, skip to [Optimize Miner Rewards](#optimise-miner-rewards).
 
 # Setup and Usage
 
@@ -36,12 +43,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv python install 3.13
 ```
 
-2、clone `SN hermes`
+2、clone `SN SubQuery`
 
 ```bash
-git clone git@github.com:subquery/network-hermes-subnet.git
+git clone git@github.com:subquery/network-SQT-subnet.git
 
-cd network-hermes-subnet
+cd network-SQT-subnet
 
 # sync and create venv
 uv sync
@@ -49,7 +56,7 @@ uv sync
 source .venv/bin/activate
 
 # install btcli
-(network-hermes-subnet) uv pip install bittensor-cli 
+(network-SQT-subnet) uv pip install bittensor-cli 
 ```
 
 ### Bittensor wallet
@@ -60,7 +67,7 @@ We use `btcli` to create wallet.
 
 ```bash
 # this will need you to input your own password to proceed
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 btcli wallet new_coldkey --wallet.name miner
 ```
 
@@ -69,18 +76,18 @@ btcli wallet new_coldkey --wallet.name miner
 2、Create a hotkey
 
 ```bash
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 btcli wallet new_hotkey --wallet.name miner --wallet.hotkey default
 ```
 
-3、Register in `SN hermes`
+3、Register in `SN SubQuery`
 
 ```bash
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 btcli subnet register --wallet.name miner --wallet.hotkey default
 ```
 
-If the registration is successful, you will receive a **UID**, which represents your hotkey slot in `SN Hermes`.
+If the registration is successful, you will receive a **UID**, which represents your hotkey slot in `SN SubQuery`.
 
 **Note:** This operation requires a burn fee. Make sure your cold wallet has a sufficient TAO balance.
 
@@ -91,7 +98,7 @@ With everything prepared, it’s time to launch the miner.
 First, create a configuration file.
 
 ```bash
-(network-hermes-subnet) %
+(network-SQT-subnet) %
 cp .env.miner.example .env.miner
 ```
 
@@ -102,7 +109,7 @@ SUBTENSOR_NETWORK=finney
 WALLET_NAME=miner
 HOTKEY=default
 
-# SN hermes NETUID
+# SN SubQuery NETUID
 NETUID=10
 
 # Your public IP address
@@ -144,7 +151,7 @@ Configuration Parameters:
 Last,  launch the miner：
 
 ```bash
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 python -m neurons.miner
 ```
 
@@ -155,70 +162,37 @@ This will pull projects and start serving. You should see output similar to the 
 2025-09-04 13:42:06.102 | INFO     | __main__:profile_tools_stats:293 - [MINER] Project QmfUNJC1Qz8m3F67sQmxrwjuSAu4WaCR1iBdPPdzBruQ7P - Tool usage stats: {}
 ```
 
-# How Miners Optimize Themselves
+# Optimise Miner Rewards
 
-## Before Optimize
+## Scoring Mechanism Explained
+1. Validators pick the selected project(s) from the board (https://subnet.subquery.network)
+2. Each of those projects has a subquery endpoint or a subgraph endpoint attached to it.
+3. Validators generate a synthetic challenge based on the project's schema and send it to miners. At the same time, validators send the challenge to the graphql agent for ground truth.
+4. Validators evaluate the miner's response based on its factual accuracy and response time.
 
-We have reserved the capability for miners to develop their own tools.
+## Primitive Approaches 
+Miners are expected to optimise the response time to the synthetic challenges while maintaining high factual accuracy.
+There are two ways to do such and earn more rewards than competing miners:
+* Wiring hand-crafted tools to the project, which generates same or optimised graphql queries, triming the data to bring down the response time.
+* Improving the graphql agent itself to be more efficient.
+* Use a better LLM model which is more efficient but has the same level of intelligence, so the result it gives is as accurate as the ground truth.
 
-Before diving into the Optimization Guide, let’s take a look at how a miner works before any optimization.
+## Step by Step Guide
+### 1. Discover the project to optimise
 
-We will take Subquery Mainnet` (cid: QmfUNJC1Qz8m3F67sQmxrwjuSAu4WaCR1iBdPPdzBruQ7P)`as an example to see how a miner can improve its performance.
+Go to the [board](https://subnet.subquery.network) and find the selected project for miners to work on.
 
-Look at the logs below:
+![board ui for subnet](imgs/board_ui.pngi.png)
 
-![](./miner_1.png)
+Click to understand the project's schema and data, find the graphql endpoint and test queries in the playground.
 
-From the logs, we can see:
+![project_detail_page.png](imgs/project_detail_page.pnge.png)
 
-1、miner received a synthetic challenge from Validator.
-
-***How much total reward did indexer 0xe60554D90AF0e84A9C3d1A8643e41e49403945a6 earn in era 0x51?***
-
-2、The miner took about 90 seconds to compute the accurate result, which is a little bit long.
-
-Now, let's switch to the Validator's perspective and see what happens.
-
-![](./validator_1.png)
-
-1、Validator received miner's answer.
-
-2、Validator assigned the miner a **ground truth score** of 10 (the highest score).
-
-However, because the miner's response time was 92 seconds—much longer than that of other miners—it received an **elapsed weight** of 0.18, which is very low.
-
-By combining the **ground truth score** and the **elapsed weight**, the miner ended up with a low overall score of 1.88.
-
-## Optimize Guide
-
-Now, let's try to improve this.<br/>
-
-As we know, the structure of `SN Hermes` is as follows:
-
-```bash
-...
-── neurons
-│   ├── miner.py
-│   └── validator.py
-├── projects
-│   │
-├── pyproject.toml
-└── uv.lock
+### 2. Run miner
 ```
-
-We have reserved the `projects` folder for miners to implement improvements.
-
-We follow the convention:
-
-- When starting, the miner will load tools from `projects/miner/$project_cid`. Each project loads its own set of tools separately.
-
-- Tools must be exported in the module in the following format:
-  
-  ```python
-  tools = [ tool_1, tool_2 ]
-  ```
-
-Following this convention, we create a folder named `QmfUNJC1Qz8m3F67sQmxrwjuSAu4WaCR1iBdPPdzBruQ7P` and add a `tools.py` file.
+uv run python -m neurons.miner
+```
+it should load current active projects and create folders for each project in `projects/miner`.
 
 The directory structure looks like this:
 
@@ -230,99 +204,43 @@ The directory structure looks like this:
 ├── projects
 │   ├── miner
 │   │   └── QmfUNJC1Qz8m3F67sQmxrwjuSAu4WaCR1iBdPPdzBruQ7P
-│   │       ├── request.py
+│   │       └── config.json
+│   │       └── tools.py
+│   │   └── <project_id>
+│   │       └── config.json
 │   │       └── tools.py
 ├── pyproject.toml
 └── uv.lock
 ```
 
-`tools.py`:
+and miner can see what kind of challenges it is receiving:
 
+![](imgs/miner_1.pngpng)
+
+### 3. Wire tools
+Create a `tools.py` file in the project folder. The tools should be exported in the following format:
 ```python
-from langchain_core.tools import tool
-from .request import request_subquery
-
-@tool
-async def query_indexer_rewards(indexer: str, era: str) -> int:
-    """
-    Query the total rewards for a specific indexer in a given era.
-
-    Do NOT call this tool when:
-        1. The query is related to Stake, APY, Commission Rate or other non-reward metrics.
-
-    Args:
-        indexer (str): The indexer address or identifier
-        era (str): Era number in two supported formats:
-                  - Hexadecimal format: e.g., "0x48"
-                  - Decimal format: e.g., "72" (equivalent to 0x48)
-
-    Returns:
-        int: Total rewards earned by the indexer in the specified era,
-             returned in 18-decimal precision SQT (wei units).
-             Can be converted to ETH if needed (1 ETH = 10^18 wei).
-
-    Examples:
-        - query_indexer_rewards("indexer_address", "0x48")
-        - query_indexer_rewards("indexer_address", "72")
-    """
-
-    query = '''
-    query (
-      $id: String!
-    ) {
-      indexerReward(
-        id: $id
-      ) {
-        id
-        amount
-      }
-    }
-    '''
-
-    if era.startswith("0x"):
-        era_hex = era.lower()
-    else:
-        try:
-            era_hex = hex(int(era))
-        except Exception:
-            era_hex = era
-
-    r = await request_subquery({
-        "query": query,
-        "type": "indexerReward",
-        "variables": {
-            "id": f"{indexer}:{era_hex}"
-        },
-    })
-    return r.get('amount') if r else 0
-
-
-tools = [query_indexer_rewards]
+tools = [ tool_1, tool_2 ]
 ```
 
-The tool example above illustrates the tool's usage and argument schema in detail, which helps the LLM model call this tool effectively.
+For starter, can copy `projects/miner/QmfUNJC1Qz8m3F67sQmxrwjuSAu4WaCR1iBdPPdzBruQ7P/tools.py` to other projects.
 
-Now that we have added a tool, let's check if it works.
+To create your own tool, note that we use langgraph (https://github.com/langgraph/langgraph) to build the agent,
+it reads the tool's description and arguments from function docstring. So make sure you change them after the copy, and write clear and complete docstring for your tool.
 
-From the miner's perspective:
+### 4. Put it into production and monitor
+Restart miner.
 
-![](./miner_improve.png)
+Monitor the tool usage stats from console logs to see if the tool is being used. and to see if the response time is improved.
+We will release more tools for miners to compare their result with graphql agent results.
 
-1、The miner receives a challenge
-
-***In era 0x40, what was the total delegator reward amount for indexer 0xF64476a9A06ABC89da3CE502c6E09b22B676C14E?***
-
-2、The miner took 3 seconds to compute the accurate result.
-
-3、To verify, we can see that the query invoked our added tool **query_indexer_rewards**, as indicated by the increment in the tool stats logs.
+We can see that the query invoked our added tool **query_indexer_rewards**, as indicated by the increment in the tool stats logs.
 
 ```bash
 [MINER] Project QmfUNJC1Qz8m3F67sQmxrwjuSAu4WaCR1iBdPPdzBruQ7P - 
 Tool usage stats: {'query_indexer_rewards': 1}
 ```
 
-Switching to the Validator's perspective:
+If the tool is not being used, you can try to improve the tool's description and arguments, or the prompt to make the tool more likely to be called.
 
-![validator_2.jpg](./validator_2.png)
-
-We can see that, while maintaining accuracy, the miner's response time has caught up with other miners, resulting in a final score comparable to the others, which represents a significant improvement.
+Or it could because the challenge is not related to the tool. Miner should always add more tools to increase the hit rate.

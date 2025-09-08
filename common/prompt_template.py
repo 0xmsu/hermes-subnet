@@ -14,6 +14,7 @@ Your task:
 Now generate the question:
 """
 
+# for demo purpose
 synthetic_challage_subql_V2 = """
 You are a question generator for database schema analysis.
 

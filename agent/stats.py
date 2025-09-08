@@ -11,6 +11,8 @@ class ToolCountHandler(BaseCallbackHandler):
         name = (serialized.get("name")
                 or serialized.get("id")
                 or "unknown_tool")
+        if name in ["graphql_schema_info", "graphql_query_validator", "graphql_execute", "graphql_type_detail"]:
+            return
         self.counter[name] = self.counter.get(name, 0) + 1
 
     def stats(self) -> Dict[str, int]:

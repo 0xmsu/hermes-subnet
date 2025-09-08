@@ -53,6 +53,11 @@ class Miner(BaseNeuron):
 
     def __init__(self):
         super().__init__()
+        
+        # Configure loguru to intercept and control third-party logging  
+        import common.utils as utils
+        utils.configure_loguru()
+        
         self.agents = {}
 
     async def start(self):
@@ -285,7 +290,7 @@ class Miner(BaseNeuron):
 
     async def profile_tools_stats(self):
         while True:
-            await asyncio.sleep(10 * 1)
+            await asyncio.sleep(60 * 1)
             agents = self.agents
     
             for projectId, config in agents.items():

@@ -17,7 +17,7 @@ If you are looking for guidance on local testing, please refer to the [local run
 
 # Validator
 
-Operating a validator node requires dedicated hardware and software resources. Validators play a critical role in the **SN Hermes** network by:
+Operating a validator node requires dedicated hardware and software resources. Validators play a critical role in the **SN SubQuery** network by:
 
 - Generating synthetic challenges
 - Evaluating and scoring miner performance
@@ -43,12 +43,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv python install 3.13
 ```
 
-2、clone `SN hermes`
+2、clone `SN SubQuery`
 
 ```bash
-git clone git@github.com:subquery/network-hermes-subnet.git
+git clone git@github.com:subquery/network-SQT-subnet.git
 
-cd network-hermes-subnet
+cd network-SQT-subnet
 
 # sync and create venv
 uv sync
@@ -56,7 +56,7 @@ uv sync
 source .venv/bin/activate
 
 # install btcli
-(network-hermes-subnet) uv pip install bittensor-cli 
+(network-SQT-subnet) uv pip install bittensor-cli 
 ```
 
 ### Bittensor wallet
@@ -67,7 +67,7 @@ We use `btcli` to create wallet.
 
 ```bash
 # this will need you to input your own password to proceed
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 btcli wallet new_coldkey --wallet.name validator
 ```
 
@@ -76,18 +76,18 @@ btcli wallet new_coldkey --wallet.name validator
 2、Create a hotkey
 
 ```bash
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 btcli wallet new_hotkey --wallet.name validator --wallet.hotkey default
 ```
 
-3、Register in `SN hermes`
+3、Register in `SN SubQuery`
 
 ```bash
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 btcli subnet register --wallet.name validator --wallet.hotkey default
 ```
 
-If the registration is successful, you will receive a **UID**, which represents your hotkey slot in `SN Hermes`.
+If the registration is successful, you will receive a **UID**, which represents your hotkey slot in `SN SubQuery`.
 
 **Note:** This operation requires a burn fee. Make sure your cold wallet has a sufficient TAO balance.
 
@@ -95,12 +95,12 @@ If the registration is successful, you will receive a **UID**, which represents 
 
 A validator’s stake is a crucial metric for Extraction in Bittensor. To qualify as a valid validator, your wallet must hold a sufficient stake.
 
-In `SN Hermes`, at least **200 TAO** must be staked to register as a valid validator.
+<del> In `SN SubQuery`, at least **200 TAO** must be staked to register as a valid validator. </del>
 
 As an option, you may perform a **self-stake**:
 
 ```bash
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 btcli stake add \
   --wallet.name validator \
   --wallet.hotkey default \
@@ -114,7 +114,7 @@ Once everything is prepared, it’s time to launch the validator.
 First, create a configuration file.
 
 ```bash
-(network-hermes-subnet) %
+(network-SQT-subnet) %
 cp .env.validator.example .env.validator
 ```
 
@@ -125,7 +125,7 @@ SUBTENSOR_NETWORK=finney
 WALLET_NAME=validator
 HOTKEY=default
 
-# SN hermes NETUID
+# SN SubQuery NETUID
 NETUID=10
 
 # Your public IP address
@@ -158,7 +158,7 @@ Configuration Parameters:
 
 * `OPENAI_API_KEY`: API key for OpenAI (currently the only supported provider).
 
-* `LLM_MODEL`: LLM model used by the validator to generate synthetic challenges.
+* `LLM_MODEL`: LLM model used by the validator to generate synthetic challenges. GPT-5 or similar models are recommended.
 
 * `SCORE_LLM_MODEL`: LLM model used by the validator to score miners. It is recommended to use a model with reasoning capabilities, such as `o3`.
 
@@ -167,7 +167,7 @@ Configuration Parameters:
 Last,  launch the Validator：
 
 ```bash
-(network-hermes-subnet) % 
+(network-SQT-subnet) % 
 python -m neurons.validator
 ```
 

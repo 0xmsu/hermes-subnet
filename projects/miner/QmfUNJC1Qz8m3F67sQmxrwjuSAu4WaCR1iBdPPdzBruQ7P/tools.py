@@ -1,6 +1,26 @@
+import aiohttp
 from langchain_core.tools import tool
-from .request import request_subquery
+from typing import Any, Dict
 
+async def request_subquery(options: Dict[str, Any]):
+    async with aiohttp.ClientSession() as session:
+        payload = {
+            "variables": options.get("variables", {}),
+             "query": options["query"]
+        }
+        url = options.get("url") or "https://index-api.onfinality.io/sq/subquery/subquery-mainnet"
+        timeout = options.get("timeout", 30)
+        method = options.get("method", "POST").upper()
+
+        async with session.request(
+            method,
+            url,
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=timeout)
+        ) as resp:
+            result = await resp.json()
+            res = result.get("data", {}).get(options["type"])
+        return res
 
 @tool
 async def query_indexer_rewards(indexer: str, era: str) -> int:
@@ -55,11 +75,5 @@ async def query_indexer_rewards(indexer: str, era: str) -> int:
         },
     })
     return r.get('amount') if r else 0
-
-
-
-# print(query_indexer_rewards.name)
-# print(query_indexer_rewards.description)
-# print(query_indexer_rewards.args)
 
 tools = [query_indexer_rewards]

@@ -1,6 +1,6 @@
-# SN Hermes incentive mechanisms
+# SN SubQuery incentive mechanisms
 
-The `SN Hermes` incentive system consists of two primary components: the FactorScore alignment between miners and validators in synthetic challenges, and the response time weighting mechanism. The final score is derived from the comprehensive evaluation of these two factors.
+The `SN SubQuery` incentive system consists of two primary components: the FactorScore alignment between miners and validators in synthetic challenges, and the response time weighting mechanism. The final score is derived from the comprehensive evaluation of these two factors.
 
 
 
