@@ -19,14 +19,13 @@
 import asyncio
 from pathlib import Path
 import time
-from tkinter import END
 from typing import Dict
 import bittensor as bt
 from loguru import logger
 from ollama import AsyncClient
 from bittensor.core.stream import StreamingSynapse
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.graph import StateGraph, MessagesState, START, END
 
 from agent.agent_zoo import AgentZoo
 from common.protocol import CapacitySynapse, OrganicNonStreamSynapse, OrganicStreamSynapse, SyntheticNonStreamSynapse, SyntheticSynapse, SyntheticStreamSynapse
