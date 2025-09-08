@@ -80,6 +80,10 @@ class Settings:
         return int(os.environ.get("PORT", "8085"))
 
     @property
+    def miner_port(self) -> int:
+        return int(os.environ.get("MINER_PORT", str(self.port + 1)))
+
+    @property
     def external_ip(self) -> str | None:
         return os.environ.get("EXTERNAL_IP", None)
 
