@@ -114,7 +114,7 @@ First, create a configuration file.
 
 ```bash
 (network-hermes-subnet) %
-cp .env.validator.example .env.validator
+cp .env.example .env
 ```
 
 Second, edit the file to apply your own settings:

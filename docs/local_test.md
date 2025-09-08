@@ -275,7 +275,7 @@ class GraphQLAgent:
 
 4、run validator：
 
-* add `.env.validator` file
+* add `.env` file (with validator-specific configuration)
 
 ```ini
 SUBTENSOR_NETWORK=ws://127.0.0.1:9944
@@ -307,7 +307,7 @@ SCORE_LLM_MODEL=o3
 
 5、run miner：
 
-* add `.env.miner` file
+* add `.env` file (with miner-specific configuration)
 
 ```ini
 SUBTENSOR_NETWORK=ws://127.0.0.1:9944

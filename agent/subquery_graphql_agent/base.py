@@ -1,11 +1,15 @@
 """Base GraphQL Toolkit implementation."""
 
+import os
+import logging
 from typing import List, Optional, Dict, Any
 from abc import ABC, abstractmethod
 
 from langchain_core.tools import BaseTool
 from langchain_core.language_models import BaseLanguageModel
+from langchain_openai import ChatOpenAI
 from langchain.agents.agent_toolkits.base import BaseToolkit
+from langgraph.prebuilt import create_react_agent
 from pydantic import ConfigDict
 
 from .tools import (
@@ -15,6 +19,18 @@ from .tools import (
     GraphQLExecuteTool
 )
 
+from .node_types import GraphqlProvider, detect_node_type
+from .tools import create_system_prompt
+
+
+# Create logger
+logger = logging.getLogger(__name__)
+
+# Set log level from environment
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+if hasattr(logging, log_level):
+    logger.setLevel(getattr(logging, log_level))
+    logging.getLogger().setLevel(getattr(logging, log_level))
 
 class GraphQLSource:
     """
@@ -151,6 +167,193 @@ class GraphQLToolkit(BaseToolkit):
         """Get the dialect name."""
         return "graphql"
 
+class ProjectConfig:
+    """Configuration for a SubQuery or The Graph project."""
+    cid: str
+    endpoint: str
+    schema_content: str
+    node_type: str = GraphqlProvider.UNKNOWN
+    manifest: Dict[str, Any] = None
+    domain_name: str = "GraphQL Project"
+    domain_capabilities: List[str] = None
+    decline_message: str = "I'm specialized in this project's data queries. I can help you with the indexed blockchain data, but I cannot assist with [their topic]. Please ask me about this project's data instead."
+    suggested_questions: List[str] = None
+    authorization: Optional[str] = None
+
+    def __post_init__(self):
+        if self.manifest is None:
+            self.manifest = {}
+        if self.domain_capabilities is None:
+            self.domain_capabilities = [
+                "Blockchain data indexed by this project",
+                "Entity relationships and queries",
+                "Project-specific metrics and analytics"
+            ]
+        if self.suggested_questions is None:
+            self.suggested_questions = [
+                "What types of data can I query from this project?",
+                "Show me a sample GraphQL query",
+                "What entities are available in this schema?",
+                "How can I filter the data?"
+            ]
+
+
+class GraphQLAgent:
+    """GraphQL agent for a specific SubQuery project."""
+
+    def __init__(self, config: ProjectConfig):
+        """Initialize the agent with project configuration."""
+        self.config = config
+
+        # Check for API key
+        if not os.getenv("OPENAI_API_KEY"):
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+
+        # Initialize LLM
+        model_name = os.getenv("LLM_MODEL", "gpt-4o-mini")
+        self.llm = ChatOpenAI(
+            model=model_name,
+            temperature=0
+        )
+
+        # Create tools with node type information and authorization header
+        headers = {}
+        if config.authorization:
+            headers["Authorization"] = config.authorization
+
+        toolkit = create_graphql_toolkit(
+            config.endpoint,
+            config.schema_content,
+            headers=headers if headers else None,
+            node_type=config.node_type,
+            manifest=config.manifest
+        )
+        self.tools = toolkit.get_tools()
+
+        # Setup agent
+        self._setup_agent()
+
+    def _setup_agent(self):
+        # Create system prompt for langgraph
+        prompt = create_system_prompt(
+            domain_name=self.config.domain_name,
+            domain_capabilities=self.config.domain_capabilities,
+            decline_message=self.config.decline_message
+        )
+
+        # Create agent with system message
+        self.executor = create_react_agent(
+            model=self.llm,
+            tools=self.tools,
+            prompt=prompt
+        )
+
+    async def query_no_stream(self, question):
+        response = await self.executor.ainvoke(
+            {"messages": [{"role": "user", "content": question}]},
+            config={
+                "recursion_limit": 25,
+            }
+        )
+        return response
+
+    async def query(self, messages: list, include_think: bool = False):
+        """Streaming query using langgraph agent with conversation history support."""
+        logger.info(f"GraphQLAgent.query called with include_think={include_think}")
+        think_started = False
+        chunk_size = 60
+
+        # Convert message format if needed
+        if isinstance(messages, str):
+            # Backward compatibility: if a string is passed, treat as single user message
+            messages = [{"role": "user", "content": messages}]
+        elif isinstance(messages, list) and messages:
+            # Convert ChatCompletionMessage objects to dict format if needed
+            formatted_messages = []
+            for msg in messages:
+                if hasattr(msg, 'role') and hasattr(msg, 'content'):
+                    # Pydantic model - convert to dict
+                    formatted_messages.append({"role": msg.role, "content": msg.content})
+                elif isinstance(msg, dict):
+                    # Already in correct format
+                    formatted_messages.append(msg)
+                else:
+                    # Fallback
+                    formatted_messages.append({"role": "user", "content": str(msg)})
+            messages = formatted_messages
+
+        # Get last user message for logging
+        last_user_msg = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+
+        try:
+            logger.info(f"Processing query for {self.config.cid} with {len(messages)} messages: {last_user_msg[:100]}...")
+            async for event in self.executor.astream({"messages": messages}):
+                logger.debug(f"Event keys: {list(event.keys())}")
+                logger.debug(f"Event: {event}")
+
+                # Handle langgraph events - they contain node names as keys
+                for node_name, node_output in event.items():
+                    if node_name == "agent":
+                        # Agent node - contains tool calls or final message
+                        if isinstance(node_output, dict) and "messages" in node_output:
+                            messages = node_output["messages"]
+                            for message in messages:
+                                # Handle tool calls in agent messages
+                                if hasattr(message, 'tool_calls') and message.tool_calls and include_think:
+                                    if not think_started:
+                                        yield "<think>\n"
+                                        think_started = True
+                                    for tool_call in message.tool_calls:
+                                        tool_name = tool_call.get('name', 'unknown')
+                                        yield f"[Tool: {tool_name}]\n"
+
+                                # Handle regular message content
+                                elif hasattr(message, 'content') and message.content:
+                                    if think_started:
+                                        yield "</think>\n"
+                                        think_started = False
+
+                                    content = str(message.content).strip()
+                                    idx = 0
+                                    while idx < len(content):
+                                        chunk = content[idx:idx+chunk_size]
+                                        yield chunk
+                                        idx += chunk_size
+
+                    elif node_name == "tools" and include_think:
+                        # Tools node - contains tool execution results
+                        if not think_started:
+                            yield "<think>\n"
+                            think_started = True
+
+                        if isinstance(node_output, dict) and "messages" in node_output:
+                            messages = node_output["messages"]
+                            for message in messages:
+                                if hasattr(message, 'content') and message.content:
+                                    yield "\n[Tool Output]:\n"
+
+                                    observation = str(message.content)
+                                    # Truncate schema info output
+                                    if 'graphql_schema_info' in str(message.name if hasattr(message, 'name') else ''):
+                                        max_length = 2000
+                                        if len(observation) > max_length:
+                                            observation = observation[:max_length] + f"\n\n... [Output truncated after {max_length} characters to save tokens.]"
+
+                                    idx = 0
+                                    while idx < len(observation):
+                                        chunk = observation[idx:idx+chunk_size]
+                                        yield chunk
+                                        idx += chunk_size
+                                    yield "\n\n"
+
+            # Close any remaining think block
+            if think_started:
+                yield "</think>\n"
+
+        except Exception as e:
+            logger.error(f"Query failed for {self.config.cid}: {str(e)}")
+            yield f"I encountered an issue processing your query. Error: {str(e)}"
+            return
 
 
 # Factory function for creating GraphQL toolkit

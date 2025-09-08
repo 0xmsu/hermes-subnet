@@ -17,7 +17,7 @@ class Settings:
 
     @classmethod
     def load_env_file(cls, role: str):
-        env_file = f".env.{role}"
+        env_file = ".env"
         dotenv.load_dotenv(env_file)
         logger.info(f"Loaded {env_file} file")
 

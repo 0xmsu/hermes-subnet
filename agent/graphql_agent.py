@@ -7,7 +7,7 @@ if agent_dir not in sys.path:
     sys.path.insert(0, agent_dir)
 
 # Import directly now that directory name doesn't have hyphens
-from subquery_graphql_agent.server import (
+from subquery_graphql_agent.base import (
     GraphQLAgent,
     ProjectConfig
 )

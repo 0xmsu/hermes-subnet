@@ -71,6 +71,10 @@ class Validator(BaseNeuron):
         self.device = 'cpu'
 
         self.dendrite = bt.dendrite(wallet=self.settings.wallet)
+        
+        # Configure synthetic challenge loop interval (default: 10 minutes)
+        self.challenge_interval = int(os.getenv("CHALLENGE_INTERVAL", 600))  # seconds
+        logger.info(f"Synthetic challenge interval set to {self.challenge_interval} seconds")
 
     async def start(self):
         super().start()
@@ -159,7 +163,7 @@ class Validator(BaseNeuron):
             ground_truth: str = await self.generate_ground_truth(question)
             if not ground_truth:
                 logger.warning("Failed to generate ground truth, skipping this round.", traceId=trace_id)
-                await asyncio.sleep(60)
+                await asyncio.sleep(self.challenge_interval)
                 continue
 
             # TODO: check ground truth has real content
@@ -201,7 +205,7 @@ class Validator(BaseNeuron):
             # # # keep score 
             self.set_weights(uids, weighted_scores)
 
-            await asyncio.sleep(60)
+            await asyncio.sleep(self.challenge_interval)
 
     async def generate_ground_truth(self, question: str):
         try:
