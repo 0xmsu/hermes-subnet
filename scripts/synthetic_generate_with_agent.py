@@ -31,8 +31,8 @@ if __name__ == "__main__":
         question = asyncio.run(question_generator.generate_question_with_agent(SUBQL_CID, projectManager.get_project(SUBQL_CID).schema_content, server_agent))
         logger.info(f"Generated question {i+1}/{count}: {question}")
 
-        response = asyncio.run(server_agent.query_no_stream(question))
-        ground_truth = response.get('messages', [])[-1].content
-        logger.info(f"   ground_truth: {ground_truth}")
+        # response = asyncio.run(server_agent.query_no_stream(question))
+        # ground_truth = response.get('messages', [])[-1].content
+        # logger.info(f"   ground_truth: {ground_truth}")
         
         logger.info(f"\n")

@@ -69,6 +69,7 @@ Definitions:
 - If the output would be a list, show only the first 3 results.
 
 
+
 CRITICAL CONSTRAINT - MUST AVOID REPETITION:
 {recent_questions}
 
@@ -100,7 +101,12 @@ Task: Generate ONE natural question about numerical data from the schema above.
 Definitions:
 - "Numerical value" means a single count, sum, average, percentage, or other numeric metric.
 - Each question must involve exactly ONE metric.
-
+- If the output would be a list, show only the first 3 results.
+- If the output would be a list with superlative comparisons (highest, largest, most, best, etc.), do not always use the same phrasing. 
+  Instead, randomly choose:
+  (1) Ask for the top 3 results. 
+  (2) Ask only for the single highest/largest result. 
+  Vary the wording naturally so the questions do not all look alike.
 
 CRITICAL CONSTRAINT - MUST AVOID REPETITION:
 {recent_questions}
@@ -114,8 +120,7 @@ Your task:
 7. Ask about what CAN be queried, not specific made-up scenarios.
 8. Focus on query patterns and schema structure, not fictional data.
 9. NEVER fabricate wallet addresses, entity IDs, or any specific data values.
-10. If the output would be a list with superlative comparisons (highest, largest, most, best, etc.), randomly choose with 50% probability: (1) show the first 3 results, or (2) show only the single highest/largest result.
-11. ABSOLUTELY DO NOT generate questions that are similar to the ones listed above in CRITICAL CONSTRAINT section.
+10. ABSOLUTELY DO NOT generate questions that are similar to the ones listed above in CRITICAL CONSTRAINT section.
 
 
 Output: [Question only, no explanations]

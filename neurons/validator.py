@@ -20,7 +20,7 @@ import copy
 import os
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Dict
 from loguru import logger
 import numpy as np
 import bittensor as bt
@@ -38,6 +38,7 @@ from hermes.validator.question_generator import question_generator
 from hermes.validator.api import app
 from hermes.base import BaseNeuron
 import agent.graphql_agent as subAgent
+from hermes.validator.ema import EMAUpdater
 
 
 SUBQL_CID = 'QmfUNJC1Qz8m3F67sQmxrwjuSAu4WaCR1iBdPPdzBruQ7P'
@@ -45,6 +46,7 @@ class Validator(BaseNeuron):
     version: str = '5'
 
     server_agent: Any
+    server_agents: Dict[str, subAgent.GraphQLAgent]
     dendrite: bt.Dendrite
     miners: list[int] | None
     llm: ChatOpenAI | None
@@ -53,6 +55,9 @@ class Validator(BaseNeuron):
     hotkeys: dict[int, str]  # uid to hotkey mapping
     scores: torch.Tensor
     device: str
+    last_score: list[float]
+    ema: EMAUpdater
+    _last_set_weight_time: float
 
     @property
     def role(self) -> str:
@@ -64,6 +69,8 @@ class Validator(BaseNeuron):
         # Configure loguru to intercept and control third-party logging
         utils.configure_loguru()
         
+        self._last_set_weight_time = time.time()
+        self.ema = EMAUpdater(alpha=0.7)
         self.miners = []
 
         self.hotkeys = copy.deepcopy(self.settings.metagraph.hotkeys)
@@ -74,7 +81,9 @@ class Validator(BaseNeuron):
         
         # Configure synthetic challenge loop interval (default: 10 minutes)
         self.challenge_interval = int(os.getenv("CHALLENGE_INTERVAL", 600))  # seconds
+        self.set_weight_interval = int(os.getenv("SET_WEIGHT_INTERVAL", 60 * 30))  # seconds
         logger.info(f"Synthetic challenge interval set to {self.challenge_interval} seconds")
+        logger.info(f"Set weight interval set to {self.set_weight_interval} seconds")
 
     async def start(self):
         super().start()
@@ -90,6 +99,9 @@ class Validator(BaseNeuron):
             ),
             asyncio.create_task(
                 self.loop_query()
+            ),
+            asyncio.create_task(
+                self.set_weight()
             )
         ]
         await asyncio.gather(*tasks)
@@ -114,8 +126,14 @@ class Validator(BaseNeuron):
         self.project_manager = ProjectManager(project_dir)
         await self.project_manager.pull()
 
-        self.server_agent = subAgent.initServerAgentWithConfig(self.project_manager.get_project(SUBQL_CID))
-        # self.non_stream_chat_completion = subAgent.non_stream_chat_completion
+        self.init_agents()
+        # self.server_agent = subAgent.initServerAgentWithConfig(self.project_manager.get_project(SUBQL_CID))
+
+    def init_agents(self):
+        self.server_agents = {}
+        for cid, project_config in self.project_manager.get_projects().items():
+            self.server_agents[cid] = subAgent.initServerAgentWithConfig(project_config)
+        logger.info(f"Initialized server_agents for projects: {list(self.server_agents.keys())}")
 
     async def serve_api(self):
         try:
@@ -148,66 +166,99 @@ class Validator(BaseNeuron):
             await asyncio.sleep(30)
 
     async def loop_query(self):
-        entity_schema = self.project_manager.get_project(SUBQL_CID).schema_content
+        # entity_schema = self.project_manager.get_project(SUBQL_CID).schema_content
         await asyncio.sleep(10)
     
         while True:
-            # generate challenge
-            question = question_generator.generate_question(SUBQL_CID, entity_schema, self.llm)
-            trace_id = str(uuid4())
-
-            logger.info(f"\n🤖 generate synthetic challenge: {question}", traceId=trace_id)
-
-            # generate ground truth
-            start_time = time.perf_counter()
-            ground_truth: str = await self.generate_ground_truth(question)
-            if not ground_truth:
-                logger.warning("Failed to generate ground truth, skipping this round.", traceId=trace_id)
+            projects = self.project_manager.get_projects()
+            if not projects:
+                logger.warning("No projects found, skipping this round.")
                 await asyncio.sleep(self.challenge_interval)
                 continue
 
-            # TODO: check ground truth has real content
-            
-            end_time = time.perf_counter()
-            ground_cost = end_time - start_time
-            logger.info(f"\n🤖 generate ground_truth: {ground_truth} cost: {ground_cost}s", traceId=trace_id)
+            uids = [uid for uid in self.settings.miners() if uid != self.uid]
 
-            # query all miner
-            tasks = []
-            uids = self.settings.miners()
-            uids = [uid for uid in uids if uid != self.uid]
-            logger.info(f"query miners: {uids}")
-            for uid in uids:
-                tasks.append(
-                    asyncio.create_task(self.query_miner(uid, trace_id, question, ground_truth))
-                )
-            responses = await asyncio.gather(*tasks)
+            project_score = []
 
-            # score result
-            tasks = []
-            for r in responses:
-                tasks.append(
-                    asyncio.create_task(self.get_score(ground_truth, r))
-                )
-            scores = await asyncio.gather(*tasks)
-            truth_scores = [float(s) for s in scores]
-            logger.info(f" ground_truth scores: {truth_scores}")
+            for cid, project_config in projects.items():
+                # generate challenge
+                # question = question_generator.generate_question(cid, project_config.schema_content, self.llm)
+                question = await question_generator.generate_question_with_agent(cid, project_config.schema_content, self.server_agents[cid])
+                trace_id = str(uuid4())
 
-            elapse_time = [r.elapsed_time for r in responses]
-            logger.info(f" elapse_time: {elapse_time}")
+                logger.info(f"\n🤖 generate synthetic challenge: {question}", traceId=trace_id)
 
-            elapse_weights = [utils.get_elapse_weight_quadratic(r.elapsed_time, ground_cost) for r in responses]
-            logger.info(f" elapse_weights: {elapse_weights}")
+                # generate ground truth
+                start_time = time.perf_counter()
+                ground_truth: str = await self.generate_ground_truth(cid, question)
+                if not ground_truth:
+                    project_score.append([1] * len(uids))
+                    logger.warning("Failed to generate ground truth.", traceId=trace_id)
+                    continue
 
-            weighted_scores = [s * w for s, w in zip(truth_scores, elapse_weights)]
-            logger.info(f" zip scores: {weighted_scores}")
+                # TODO: check ground truth has real content
+                end_time = time.perf_counter()
+                ground_cost = end_time - start_time
+                logger.info(f"\n🤖 generate ground_truth: {ground_truth} cost: {ground_cost}s")
 
-            # # # keep score 
-            self.set_weights(uids, weighted_scores)
+                logger.info(f"query miners: {uids}")
+                # query all miner
+                tasks = []
+                for uid in uids:
+                    tasks.append(
+                        asyncio.create_task(self.query_miner(uid, cid, trace_id, question, ground_truth))
+                    )
+                responses = await asyncio.gather(*tasks)
+
+                # score result
+                tasks = []
+                for r in responses:
+                    tasks.append(
+                        asyncio.create_task(self.get_score(ground_truth, r))
+                    )
+                scores = await asyncio.gather(*tasks)
+                truth_scores = [float(s) for s in scores]
+                logger.info(f" ground_truth scores: {truth_scores}")
+
+                elapse_time = [r.elapsed_time for r in responses]
+                logger.info(f" elapse_time: {elapse_time}")
+
+                elapse_weights = [utils.get_elapse_weight_quadratic(r.elapsed_time, ground_cost) for r in responses]
+                logger.info(f" elapse_weights: {elapse_weights}")
+
+                zip_scores = [s * w for s, w in zip(truth_scores, elapse_weights)]
+                logger.info(f" zip scores: {zip_scores}")
+
+                project_score.append(zip_scores)
+
+
+            project_score = np.array(project_score)
+            logger.info(f"project_score: {project_score}")
+
+            project_score = project_score.sum(axis=0)
+            logger.info(f"project sum score: {project_score}")
+
+            self.ema.update(uids, project_score.tolist())
 
             await asyncio.sleep(self.challenge_interval)
 
-    async def generate_ground_truth(self, question: str):
+
+    async def set_weight(self):
+        while True:
+            await asyncio.sleep(10)
+            if time.time() - self._last_set_weight_time > self.set_weight_interval:
+                try:
+                    uids = list(self.ema.last_scores.keys())
+                    if not uids:
+                        continue
+                    scores = list(self.ema.last_scores.values())
+                    self._set_weights(uids, scores)
+
+                    self._last_set_weight_time = time.time()
+                except Exception as e:
+                    logger.error(f"Failed to set_weight: {e}")
+
+    async def generate_ground_truth(self, cid: str, question: str):
         try:
             # response = await self.non_stream_chat_completion(
             #     self.server_agent,
@@ -220,7 +271,12 @@ class Validator(BaseNeuron):
             # logger.info(f"Generated ground truth response: {response.choices[0].message.content}")
             # return response.choices[0].message.content
 
-            response = await self.server_agent.query_no_stream(question)
+            if cid not in self.server_agents:
+                logger.warning(f"No server agent found for cid: {cid}")
+                return ''
+            
+            server_agent = self.server_agents[cid]
+            response = await server_agent.query_no_stream(question)
             # logger.info(f"Generated ground truth response: {response}")
             # todo: deal response
             return response.get('messages', [])[-1].content
@@ -230,10 +286,10 @@ class Validator(BaseNeuron):
             logger.error(f"Error generating ground truth: {e}")
         return ''
 
-    async def query_miner(self, uid: int, task_id: str, question: str, ground_truth: str):
+    async def query_miner(self, uid: int, cid: str, task_id: str, question: str, ground_truth: str):
         try:
             start_time = time.perf_counter()
-            synapse = SyntheticNonStreamSynapse(id=task_id, projectId=SUBQL_CID, question=question)
+            synapse = SyntheticNonStreamSynapse(id=task_id, projectId=cid, question=question)
             r = await self.dendrite.forward(
                 axons=self.settings.metagraph.axons[uid],
                 synapse=synapse,
@@ -267,7 +323,7 @@ query_miner
         logger.info(f"\n🤖 LLM get_score: {summary_response.content}")
         return summary_response.content
 
-    def set_weights(self, uids: list[int], scores: list[float]):
+    def _set_weights(self, uids: list[int], scores: list[float]):
         logger.info(f"set_weights for uids: {uids}, scores: {scores}")
 
         scattered_scores: torch.FloatTensor = self.scores.scatter(

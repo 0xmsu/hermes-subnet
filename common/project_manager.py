@@ -122,6 +122,9 @@ class ProjectManager:
     def get_project(self, cid: str) -> ProjectConfig:
         return self.projects_config.get(cid)
 
+    def get_projects(self) -> Dict[str, ProjectConfig]:
+        return self.projects_config
+
     async def pull_manifest(self, cid: str) -> Dict:
         try:
             logger.info(f"Fetching manifest for CID: {cid}")
