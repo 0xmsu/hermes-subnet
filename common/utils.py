@@ -23,7 +23,8 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back
             depth += 1
 
-        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+        # Use raw=True to prevent format string processing issues
+        logger.opt(depth=depth, exception=record.exc_info, raw=True).log(level, record.getMessage() + "\n")
 
 
 def configure_loguru():
