@@ -274,7 +274,7 @@ class Validator(BaseNeuron):
             if cid not in self.server_agents:
                 logger.warning(f"No server agent found for cid: {cid}")
                 return ''
-            
+
             server_agent = self.server_agents[cid]
             response = await server_agent.query_no_stream(question)
             # logger.info(f"Generated ground truth response: {response}")
