@@ -16,11 +16,13 @@ from hermes.validator.ema import EMAUpdater
 
 class ScorerManager:
     llm_score: ChatOpenAI
-    ema: EMAUpdater
+    overall_ema: EMAUpdater
+    synthetic_ema: EMAUpdater
     score_state_path: str | Path
 
     def __init__(self, llm_score: ChatOpenAI, score_state_path: str | Path = None):
-        self.ema = EMAUpdater(alpha=0.7)
+        self.overall_ema = EMAUpdater(alpha=0.7)
+        self.synthetic_ema = EMAUpdater(alpha=0.7)
         self.llm_score = llm_score
         self.score_state_path = score_state_path
         self.load_state()
@@ -63,6 +65,9 @@ class ScorerManager:
         if not uids or not project_score_matrix:
             return
 
+        synthetic_scores = np.array(project_score_matrix).sum(axis=0).tolist()
+        self.synthetic_ema.update(uids, hotkeys, synthetic_scores)
+
         if workload_score is not None:
             merged = project_score_matrix + [workload_score]
         else:
@@ -71,12 +76,15 @@ class ScorerManager:
         score_matrix = np.array(merged)
         score_matrix = score_matrix.sum(axis=0)
         
-        new_scores = self.ema.update(uids, hotkeys, score_matrix.tolist())
+        new_scores = self.overall_ema.update(uids, hotkeys, score_matrix.tolist())
         self.save_state(new_scores)
         logger.info(f"[ScorerManager] - {challenge_id} uids: {uids}, project_score_matrix: {project_score_matrix}, workload_score: {workload_score}, merged: {merged}, score_matrix: {score_matrix.tolist()}, updated_ema_scores: {new_scores}")
 
-    def get_last_scores(self):
-        return self.ema.last_scores
+    def get_last_overall_scores(self):
+        return self.overall_ema.last_scores
+
+    def get_last_synthetic_scores(self):
+        return self.synthetic_ema.last_scores
 
     def load_state(self):
         try:
@@ -91,7 +99,7 @@ class ScorerManager:
                 return
             
             if "scores" in state:
-                self.ema.load(state["scores"])
+                self.overall_ema.load(state["scores"])
                 logger.info(f"[ScorerManager] Load state from {self.score_state_path}, scores: {state['scores']}")
 
         except Exception as e:

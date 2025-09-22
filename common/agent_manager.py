@@ -37,6 +37,7 @@ class AgentManager:
     def __init__(self, save_project_dir: str, llm_synthetic: ChatOpenAI):
         self.save_project_dir = save_project_dir
         self.graphql_agent = {}
+        self.miner_agent = {}
         self.llm_synthetic = llm_synthetic
 
     async def start(self, pull=True, role: Literal["", "validator", "miner"] = ""):

@@ -32,6 +32,7 @@ class ChallengeManager:
     agent_manager: AgentManager
     scorer_manager: ScorerManager
     workload_manager: WorkloadManager
+    synthetic_score: list
     event_stop: Event
     scores: torch.Tensor
     uids: list[int]
@@ -44,6 +45,7 @@ class ChallengeManager:
         uid: int, 
         dendrite: bt.Dendrite,
         organic_score_queue: list,
+        synthetic_score: list,
         synthetic_model_name: str | None = None,
         score_model_name: str | None = None,
         event_stop: Event = None
@@ -86,6 +88,7 @@ class ChallengeManager:
             work_state_path=Path(self.settings.base_dir) / ".data" / "workload_state.pt"
         )
 
+        self.synthetic_score = synthetic_score
         self.event_stop = event_stop
 
         self._last_set_weight_time = time.time()
@@ -186,6 +189,7 @@ class ChallengeManager:
                 workload_score, 
                 challenge_id=challenge_id
             )
+            self.synthetic_score[0] = self.scorer_manager.get_last_synthetic_scores()
 
     async def generate_ground_truth(self, cid: str, question: str) -> Tuple[bool, str, int]:
         start_time = time.perf_counter()
@@ -250,7 +254,7 @@ class ChallengeManager:
             await asyncio.sleep(10)
             if time.time() - self._last_set_weight_time > self.set_weight_interval:
                 try:
-                    scores_dict = self.scorer_manager.get_last_scores()
+                    scores_dict = self.scorer_manager.get_last_overall_scores()
                     uids = list(scores_dict.keys())
                     scores = list(scores_dict.values())
                     if not uids:

@@ -172,10 +172,21 @@ class Miner(BaseNeuron):
 
     async def forward_capacity(self, synapse: CapacitySynapse) -> CapacitySynapse:
         logger.info(f"\n🤖 [Miner] Received capacity request")
+        if not self.agent_manager:
+            logger.warning(f"[Miner] No agent manager found")
+            synapse.response = {
+                "role": "miner",
+                "capacity": {
+                    "projects": []
+                }
+            }
+            return synapse
+
+        cids = self.agent_manager.get_miner_agent().keys()
         synapse.response = {
             "role": "miner",
             "capacity": {
-                "projects": []
+                "projects": list(cids)
             }
         }
         return synapse

@@ -33,12 +33,12 @@ class BucketCounter:
             self.buckets[bucket_id] += 1
             return self.buckets[bucket_id]
 
-    def count(self, hotkey: str):
+    def count(self, hotkey: str | None):
         now = int(time.time())
         current_bucket = now // self.bucket_seconds
         total = 0
         with self._lock:
-            if hotkey != self.hotkey:
+            if hotkey and hotkey != self.hotkey:
                 self.buckets = defaultdict(int)
                 self.hotkey = hotkey
 
@@ -118,8 +118,8 @@ class WorkloadManager:
 
             return cur
 
-    async def purge(self, uids: list[int]):
-        for uid in uids:
+    async def purge(self, uids: list[int], hotkeys: list[str]):
+        for uid, _ in zip(uids, hotkeys):
             if uid in self.uid_organic_workload_counter:
                 self.uid_organic_workload_counter[uid].cleanup()
 
@@ -141,7 +141,7 @@ class WorkloadManager:
         hotkeys: list[str],
         challenge_id: str = ""
     ) -> list[float]:
-        await self.purge(uids)
+        await self.purge(uids, hotkeys)
 
         workload_counts = []
         for uid, hotkey in zip(uids, hotkeys):

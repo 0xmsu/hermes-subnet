@@ -129,6 +129,23 @@ IF RELATED to {domain_name} data:
 
 For missing user info (like "my rewards", "my tokens"), always ask for the specific wallet address or ID rather than fabricating data."""
 
+def select_uid(synthetic_score: dict, available_miners: list, uid_select_count: dict, max_count: int = 5) -> tuple[int | None, str | None]:
+    sorted_miners = sorted(
+        [(uid, synthetic_score[uid][0] if uid in synthetic_score else 0.0) for uid in available_miners],
+        key=lambda x: x[1],
+        reverse=True
+    )
+    logger.info(f"synthetic_score: {synthetic_score}, available miners: {available_miners}, sorted miners: {sorted_miners}, uid_select_count: {uid_select_count}")
+    for uid, hotkey in sorted_miners:
+        if uid_select_count.get(uid, 0) < max_count:
+            uid_select_count[uid] = uid_select_count.get(uid, 0) + 1
+            return uid, hotkey
+    if sorted_miners:
+        uid_select_count[uid] = 1
+        return sorted_miners[0][0], sorted_miners[0][1]
+
+    return None, None
+
 def kill_process_group():
     try:
         os.killpg(os.getpgid(0), signal.SIGKILL)
