@@ -214,7 +214,10 @@ class Validator(BaseNeuron):
 
             # logger.info(f'----{response.dendrite.status_code}')
             # logger.info(f'----{response.dendrite.status_message}')
-            self.organic_score_queue.append((miner_uid, axons.hotkey, response.dict()))
+            if len(self.organic_score_queue) < 1000:
+                logger.debug(f"[Validator] organic_score_queue size: {len(self.organic_score_queue)}, is_success: {response.is_success}")
+                if response.is_success:
+                    self.organic_score_queue.append((miner_uid, axons.hotkey, response.dict()))
             return response
         
         except Exception as e:
@@ -249,7 +252,7 @@ async def main():
         try:
             organic_score_queue = manager.list([])
             miners_dict = manager.dict({})
-            synthetic_score = manager.list([])
+            synthetic_score = manager.list([{}])
 
             processes: list[mp.Process] = []
             event_stop = mp.Event()

@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 from collections import defaultdict
 import threading
+import traceback
 from loguru import logger
 from typing import TYPE_CHECKING
 import torch
@@ -178,8 +179,7 @@ class WorkloadManager:
             else:
                 normalized_workload = (quantity - min_workload) / (max_workload - min_workload)
 
-            total_score = 0.5 * quality_ema + 0.5 * normalized_workload
-            scores[idx] = total_score
+            scores[idx] = min(0.5 * quality_ema + 0.5 * normalized_workload, 5)
 
         logger.info(f"[WorkloadManager] - {challenge_id} workload_counts: {workload_counts}, quality_scores: {log_quality_scores}, compute_workload_score: {scores}")
         return scores
@@ -235,7 +235,7 @@ class WorkloadManager:
                     await asyncio.sleep(1)
 
             except Exception as e:
-                logger.error(f"[WorkloadManager] Error computing organic workload scores: {e}")
+                logger.error(f"[WorkloadManager] Error computing organic workload scores: {e}\n{traceback.format_exc()}")
 
     def load_state(self):
         try:
