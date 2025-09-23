@@ -19,8 +19,8 @@ import asyncio
 from collections import defaultdict
 import os
 from pathlib import Path
+import traceback
 import torch.multiprocessing as mp
-import random
 import time
 from fastapi.responses import StreamingResponse
 from loguru import logger
@@ -123,14 +123,15 @@ class Validator(BaseNeuron):
         while True:
             try:
                 miner_uids, miner_hotkeys = self.settings.miners()
-                for uid, hotkey in zip(miner_uids, miner_hotkeys):
+                all_miner_uids = []
+                for uid, _ in zip(miner_uids, miner_hotkeys):
                     if uid == self.uid:
                         continue
-                    miners_dict[uid] = hotkey
+                    all_miner_uids.append(uid)
                 logger.debug(f"[CheckMiner] Current miners: {miners_dict}")
 
                 tasks = []
-                for uid in miner_uids:
+                for uid in all_miner_uids:
                     tasks.append(
                         asyncio.create_task(
                             handle_availability(
@@ -221,7 +222,7 @@ class Validator(BaseNeuron):
             return response
         
         except Exception as e:
-            logger.error(f"[Validator] forward_miner error: {e}")
+            logger.error(f"[Validator] forward_miner error: {e} {traceback.format_exc()}")
             synapse = OrganicNonStreamSynapse(id=body.id, project_id=cid, completion=body)
             synapse.response = {"error": str(e)}
             return synapse
