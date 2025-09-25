@@ -34,7 +34,7 @@ class BucketCounter:
             self.buckets[bucket_id] += 1
             return self.buckets[bucket_id]
 
-    def count(self, hotkey: str | None):
+    def count(self, hotkey: str | None = None):
         now = int(time.time())
         current_bucket = now // self.bucket_seconds
         total = 0
