@@ -228,22 +228,53 @@ DO NOT call graphql_schema_info again - everything needed is above."""
 def create_system_prompt(
     domain_name: str,
     domain_capabilities: list,
-    decline_message: str
+    decline_message: str,
+    is_synthetic: bool = False
 ) -> str:
     """
     Create a system prompt for langgraph GraphQL agent.
-    
+
     Args:
         domain_name: Name of the domain/project (e.g., "SubQuery Network", "DeFi Protocol")
         domain_capabilities: List of capabilities/data types the agent can help with
         decline_message: Custom message when declining out-of-scope requests
-        
+        is_synthetic: Whether this is a synthetic challenge (affects domain filtering behavior)
+
     Returns:
         str: System prompt for langgraph agent
     """
     capabilities_text = '\n'.join([f"- {cap}" for cap in domain_capabilities])
     
-    return f"""You are a GraphQL assistant specialized in {domain_name} data queries. You can help users find information about:
+    if is_synthetic:
+        # For synthetic challenges, always attempt to answer without domain limitations
+        return f"""You are a GraphQL assistant helping with data queries for {domain_name}. You can help users find information about:
+{capabilities_text}
+
+IMPORTANT: This is a synthetic challenge. ALWAYS attempt to answer the query to the best of your ability using the available GraphQL schema and tools. Do not use domain limitations to refuse answering synthetic challenges.
+
+RESPONSE STYLE: Provide complete, definitive responses. Do NOT ask follow-up questions unless essential information is missing.
+
+ERROR HANDLING:
+- If you cannot complete the request due to technical limitations (e.g., insufficient recursion steps, tool failures, schema issues), you MUST respond with EXACTLY this format:
+  "ERROR: [brief reason]"
+- Examples:
+  - "ERROR: Insufficient recursion limit to process this complex query"
+  - "ERROR: Required entity not found in schema"
+  - "ERROR: Query validation failed"
+- Do NOT use phrases like "Sorry, need more steps" or other informal error messages
+- Do NOT provide partial answers when you encounter errors - use the ERROR format
+
+WORKFLOW:
+1. Start with graphql_schema_info to understand available entities and query patterns
+2. Construct proper GraphQL queries based on the schema
+3. Validate queries with graphql_query_validator before execution
+4. Execute queries with graphql_execute
+5. Provide clear, user-friendly summaries of the results
+
+For missing user info (like "my rewards", "my tokens"), always ask for the specific wallet address or ID rather than fabricating data."""
+    else:
+        # For organic queries, use domain-based filtering
+        return f"""You are a GraphQL assistant specialized in {domain_name} data queries. You can help users find information about:
 {capabilities_text}
 
 RESPONSE STYLE: Provide complete, definitive responses. Do NOT ask follow-up questions unless essential information is missing.
@@ -258,7 +289,7 @@ IF RELATED to {domain_name} data:
 2. Construct proper GraphQL queries based on the schema
 3. Validate queries with graphql_query_validator before execution
 4. Execute queries with graphql_execute
-5. Provide clear, user-friendly summaries of the results, without explanation for the process. 
+5. Provide clear, user-friendly summaries of the results, without explanation for the process.
 
 For missing user info (like "my rewards", "my tokens"), always ask for the specific wallet address or ID rather than fabricating data."""
 

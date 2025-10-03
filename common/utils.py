@@ -157,6 +157,45 @@ def try_get_invalid_tool_messages(messages: list[BaseMessage]) -> str | None:
                 return json.dumps(m.invalid_tool_calls)
     return None
 
+def is_ground_truth_valid(ground_truth: str | None) -> bool:
+    """
+    Validate if ground truth generation was successful.
+
+    Returns False if:
+    - ground_truth is None or empty
+    - ground_truth starts with "ERROR:" (agent's standardized error format)
+    - ground_truth contains known failure patterns like "Sorry, need more steps"
+
+    Args:
+        ground_truth: The generated ground truth response
+
+    Returns:
+        bool: True if valid, False if failed
+    """
+    if not ground_truth or not ground_truth.strip():
+        return False
+
+    ground_truth_lower = ground_truth.strip().lower()
+
+    # Check for standardized ERROR format
+    if ground_truth.strip().startswith("ERROR:"):
+        return False
+
+    # Check for known failure patterns (case-insensitive)
+    failure_patterns = [
+        "sorry, need more steps",
+        "need more steps to process",
+        "cannot process this request",
+        "recursion limit",
+        "unable to complete"
+    ]
+
+    for pattern in failure_patterns:
+        if pattern in ground_truth_lower:
+            return False
+
+    return True
+
 def try_get_tool_hit(messages: list[BaseMessage], exclude_tools=[]) -> list[tuple[str, int]]:
     tool_order = []
     tool_counts = {}

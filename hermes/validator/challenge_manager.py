@@ -155,28 +155,47 @@ class ChallengeManager:
                 project_score_matrix = []
 
                 for cid, project_config in projects.items():
-                    challenge_id = str(uuid4())
+                    # Retry loop: attempt to generate a valid challenge for this project
+                    max_retries = int(os.getenv("CHALLENGE_GENERATION_MAX_RETRIES", 3))
+                    challenge_generated = False
 
-                    # generate challenge
-                    question = await question_generator.generate_question(cid, project_config.schema_content, self.llm_synthetic)
-                    if not question:
-                        continue
+                    for attempt in range(max_retries):
+                        challenge_id = str(uuid4())
 
-                    # generate ground truth
-                    success, ground_truth, ground_cost = await self.generate_ground_truth(cid, question)
+                        # generate challenge
+                        question = await question_generator.generate_question(cid, project_config.schema_content, self.llm_synthetic)
+                        if not question:
+                            logger.warning(f"[ChallengeManager] - {cid} Failed to generate question (attempt {attempt + 1}/{max_retries})")
+                            continue
 
-                    # Create challenge table
-                    table_formatter.create_synthetic_challenge_table(
-                        round_id=self.round_id,
-                        challenge_id=challenge_id,
-                        cid=cid,
-                        question=question,
-                        success=success,
-                        ground_truth=ground_truth,
-                        ground_cost=ground_cost
-                    )
-                    if not success:
-                        logger.error(f"[ChallengeManager] - {challenge_id} Failed to generate ground truth. {ground_truth}")
+                        # generate ground truth
+                        success, ground_truth, ground_cost = await self.generate_ground_truth(cid, question)
+
+                        # Validate ground truth content
+                        is_valid = success and utils.is_ground_truth_valid(ground_truth)
+
+                        # Create challenge table
+                        table_formatter.create_synthetic_challenge_table(
+                            round_id=self.round_id,
+                            challenge_id=challenge_id,
+                            cid=cid,
+                            question=question,
+                            success=is_valid,
+                            ground_truth=ground_truth,
+                            ground_cost=ground_cost
+                        )
+
+                        if not is_valid:
+                            logger.warning(f"[ChallengeManager] - {challenge_id} Invalid ground truth (attempt {attempt + 1}/{max_retries}): {ground_truth}")
+                            continue
+
+                        # Valid challenge generated, break retry loop
+                        challenge_generated = True
+                        break
+
+                    # Skip this project if all retries failed
+                    if not challenge_generated:
+                        logger.error(f"[ChallengeManager] - {cid} Failed to generate valid challenge after {max_retries} attempts, skipping project")
                         continue
 
                     # query all miner
@@ -252,7 +271,7 @@ class ChallengeManager:
             if not agent:
                 raise ValueError(f"No server agent found for cid: {cid}")
 
-            response = await agent.query_no_stream(question)
+            response = await agent.query_no_stream(question, is_synthetic=True)
             result = response.get('messages', [])[-1].content
 
             if not result:

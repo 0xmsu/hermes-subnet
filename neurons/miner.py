@@ -176,10 +176,12 @@ class Miner(BaseNeuron):
         tag = "Synthetic"
         type = 0
         question = task.get_question()
+        is_synthetic = True
 
         if isinstance(task, OrganicNonStreamSynapse):
             tag = "Organic"
             type = 1
+            is_synthetic = False
 
         project_id = task.project_id
         agent_graph, _, graphql_agent = self.agent_manager.get_miner_agent(project_id)
@@ -314,7 +316,8 @@ class Miner(BaseNeuron):
 
     async def invoke_graphql_agent(self, synapse: SyntheticNonStreamSynapse) -> str:
         _, _, graphql_agent = self.agent_manager.get_miner_agent(synapse.project_id)
-        response = await graphql_agent.query_no_stream(synapse.question)
+        # For synthetic challenges, always attempt to answer without domain limitations
+        response = await graphql_agent.query_no_stream(synapse.question, is_synthetic=True)
         answer = response.get('messages')[-1].content
         return answer
 

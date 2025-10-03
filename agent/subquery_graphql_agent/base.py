@@ -248,11 +248,32 @@ class GraphQLAgent:
             prompt=prompt
         )
 
-    async def query_no_stream(self, question):
-        response = await self.executor.ainvoke(
+    async def query_no_stream(self, question, is_synthetic: bool = False):
+        """Execute a non-streaming query.
+
+        Args:
+            question: The query question
+            is_synthetic: Whether this is a synthetic challenge (affects domain filtering behavior)
+        """
+        # Create appropriate system prompt based on query type
+        prompt = create_system_prompt(
+            domain_name=self.config.domain_name,
+            domain_capabilities=self.config.domain_capabilities,
+            decline_message=self.config.decline_message,
+            is_synthetic=is_synthetic
+        )
+
+        # Create a temporary agent with the appropriate prompt
+        temp_executor = create_react_agent(
+            model=self.llm,
+            tools=self.tools,
+            prompt=prompt
+        )
+
+        response = await temp_executor.ainvoke(
             {"messages": [{"role": "user", "content": question}]},
             config={
-                "recursion_limit": 25,
+                "recursion_limit": 12,
             }
         )
         return response
@@ -287,7 +308,10 @@ class GraphQLAgent:
 
         try:
             logger.info(f"Processing query for {self.config.cid} with {len(messages)} messages: {last_user_msg[:100]}...")
-            async for event in self.executor.astream({"messages": messages}):
+            async for event in self.executor.astream(
+                {"messages": messages},
+                config={"recursion_limit": 12}
+            ):
                 logger.debug(f"Event keys: {list(event.keys())}")
                 logger.debug(f"Event: {event}")
 

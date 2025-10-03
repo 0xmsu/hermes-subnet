@@ -214,10 +214,13 @@ class WorkloadManager:
                         logger.info(f"[WorkloadManager] compute organic task({response.id}) for miner: {miner_uid}, response: {response}. question: {q}")
 
                         success, ground_truth, ground_cost = await self.challenge_manager.generate_ground_truth(response.project_id, q)
-                        if not success:
-                            logger.warning(f"[WorkloadManager] Failed to generate ground truth for task({response.id}). {ground_truth}")
+
+                        # Validate ground truth content
+                        is_valid = success and utils.is_ground_truth_valid(ground_truth)
+                        if not is_valid:
+                            logger.warning(f"[WorkloadManager] Invalid ground truth for task({response.id}), skipping quality scoring. Ground truth: {ground_truth}")
                             continue
-            
+
                         logger.info(f"[WorkloadManager] Generated task({response.id}) ground truth: {ground_truth}, cost: {ground_cost}, miner.response: {response.response}")
                         zip_scores, _, _ = await self.challenge_manager.scorer_manager.compute_challenge_score(
                             ground_truth, 
