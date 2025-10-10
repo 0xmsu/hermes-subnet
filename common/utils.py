@@ -1,6 +1,7 @@
 import json
 import os
 import signal
+import time
 import httpx
 from loguru import logger
 import netaddr
@@ -208,6 +209,24 @@ def try_get_tool_hit(messages: list[BaseMessage], exclude_tools=[]) -> list[tupl
                 tool_counts[m.name] += 1
     tool_hit = [(name, tool_counts[name]) for name in tool_order]
     return tool_hit
+
+def format_openai_message(content: str, finish_reason=None) -> str:
+    chunk_data = {
+        "id": f"chatcmpl-{int(time.time())}",
+        "object": "chat.completion.chunk", 
+        "created": int(time.time()),
+        "model": "hermes-miner",
+        "system_fingerprint": "fp_hermes",
+        "choices": [{
+            "index": 0,
+            "delta": {
+                "role": "assistant",
+                "content": content
+            },
+            "finish_reason": finish_reason
+        }]
+    }
+    return f"data: {json.dumps(chunk_data)}\n\n"
 
 def fix_float(elapsed: float) -> float:
     return int(elapsed * 100) / 100

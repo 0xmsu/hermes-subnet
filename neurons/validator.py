@@ -195,10 +195,14 @@ class Validator(BaseNeuron):
                         timeout=self.forward_miner_timeout,
                         streaming=True,
                     )
-
                     async for part in responses:
                         # logger.info(f"V3 got part: {part}, type: {type(part)}")
-                        yield f"{part}\n"
+                        formatted_chunk = utils.format_openai_message(part)
+                        yield f"{formatted_chunk}"
+                    
+                    yield f"{utils.format_openai_message('', finish_reason='stop')}"
+                    yield f"data: [DONE]]\n\n"
+
                 return StreamingResponse(
                     streamer(), 
                     media_type="text/plain"
