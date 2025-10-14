@@ -32,17 +32,23 @@ from common.errors import ErrorCode
 from common.logger import HermesLogger
 from common.protocol import CapacitySynapse, ChatCompletionRequest, OrganicNonStreamSynapse, OrganicStreamSynapse
 import common.utils as utils
+from common.settings import settings
 from hermes.validator.challenge_manager import ChallengeManager
 from hermes.base import BaseNeuron
 
-HermesLogger.configure_loguru(file=f"logs/hermes_validator.log")
+ROLE = "validator"
+
+settings.load_env_file(ROLE)
+LOGGER_DIR = os.getenv("LOGGER_DIR", f"logs/{ROLE}")
+
+HermesLogger.configure_loguru(file=f"{LOGGER_DIR}/hermes_validator.log")
 
 class Validator(BaseNeuron):
     dendrite: bt.Dendrite
 
     @property
     def role(self) -> str:
-        return "validator"
+        return ROLE
     
     def __init__(self):
         super().__init__()
@@ -59,7 +65,8 @@ class Validator(BaseNeuron):
             dendrite=self.dendrite,
             organic_score_queue=organic_score_queue,
             synthetic_score=synthetic_score,
-            event_stop=event_stop
+            event_stop=event_stop,
+            v=self,
         )
         tasks = [
             asyncio.create_task(
@@ -249,21 +256,21 @@ class Validator(BaseNeuron):
 
 def run_challenge(organic_score_queue: list, synthetic_score: list, event_stop: Event):
     proc = mp.current_process()
-    HermesLogger.configure_loguru(file=f"logs/{proc.name}.log")
+    HermesLogger.configure_loguru(file=f"{LOGGER_DIR}/{proc.name}.log")
 
     logger.info(f"run_challenge process id: {os.getpid()}")
     asyncio.run(Validator().run_challenge(organic_score_queue, synthetic_score, event_stop))
 
 def run_api(organic_score_queue: list, miners_dict: dict, synthetic_score: list):
     proc = mp.current_process()
-    HermesLogger.configure_loguru(file=f"logs/{proc.name}.log")
+    HermesLogger.configure_loguru(file=f"{LOGGER_DIR}/{proc.name}.log")
 
     logger.info(f"run_api process id: {os.getpid()}")
     asyncio.run(Validator().run_api(organic_score_queue, miners_dict, synthetic_score))
 
 def run_miner_checking(miners_dict: dict):
     proc = mp.current_process()
-    HermesLogger.configure_loguru(file=f"logs/{proc.name}.log")
+    HermesLogger.configure_loguru(file=f"{LOGGER_DIR}/{proc.name}.log")
 
     logger.info(f"run_miner_checking process id: {os.getpid()}")
     asyncio.run(Validator().run_miner_checking(miners_dict))

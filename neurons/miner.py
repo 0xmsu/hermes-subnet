@@ -34,20 +34,25 @@ from common.logger import HermesLogger
 from common.protocol import CapacitySynapse, OrganicNonStreamSynapse, OrganicStreamSynapse, StatsMiddleware, SyntheticNonStreamSynapse
 from common.sqlite_manager import SQLiteManager
 import common.utils as utils
+from common.settings import settings
 from hermes.base import BaseNeuron
 import agent.graphql_agent as subAgent
 
+ROLE = "miner"
+
+settings.load_env_file(ROLE)
+LOGGER_DIR = os.getenv("LOGGER_DIR", f"logs/{ROLE}")
 
 
 class Miner(BaseNeuron):
 
     @property
     def role(self) -> str:
-        return "miner"
+        return ROLE
 
     def __init__(self, config_loguru: bool = True):
         if config_loguru:
-            HermesLogger.configure_loguru(file=f"logs/{self.role}.log")
+            HermesLogger.configure_loguru(file=f"{LOGGER_DIR}/{self.role}.log")
         super().__init__()
 
     async def start(self):

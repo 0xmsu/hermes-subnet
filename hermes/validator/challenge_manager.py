@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import time
 import traceback
-from typing import Tuple
+from typing import Tuple, TYPE_CHECKING
 from uuid import uuid4
 import bittensor as bt
 from langchain_openai import ChatOpenAI
@@ -11,6 +11,8 @@ from loguru import logger
 from multiprocessing.synchronize import Event
 import numpy as np
 import torch
+if TYPE_CHECKING:
+    from neurons.validator import Validator
 from common.agent_manager import AgentManager
 from common.errors import ErrorCode
 from common.protocol import SyntheticNonStreamSynapse
@@ -47,7 +49,8 @@ class ChallengeManager:
         synthetic_score: list,
         synthetic_model_name: str | None = None,
         score_model_name: str | None = None,
-        event_stop: Event = None
+        event_stop: Event = None,
+        v: "Validator" = None,
     ):
         self.settings = settings
 
@@ -79,13 +82,13 @@ class ChallengeManager:
 
         self.scorer_manager = ScorerManager(
             llm_score=self.llm_score,
-            score_state_path=Path(self.settings.base_dir) / ".data" / "score_state.pt"
+            score_state_path=Path(self.settings.base_dir) / ".data" / f"{v.role}_score_state.pt"
         )
 
         self.workload_manager = WorkloadManager(
             challenge_manager=self,
             organic_score_queue=organic_score_queue,
-            work_state_path=Path(self.settings.base_dir) / ".data" / "workload_state.pt"
+            work_state_path=Path(self.settings.base_dir) / ".data" / f"{v.role}_workload_state.pt"
         )
 
         self.synthetic_score = synthetic_score

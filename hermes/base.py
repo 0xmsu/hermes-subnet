@@ -3,7 +3,7 @@ import sys
 from loguru import logger
 from bittensor.core.extrinsics.serving import serve_extrinsic
 
-from common.settings import Settings
+from common.settings import Settings, settings
 from common.utils import try_get_external_ip
 
 
@@ -20,8 +20,7 @@ class BaseNeuron(ABC):
 
 
     def __init__(self):
-        Settings.load_env_file(self.role)
-        self.settings = Settings()
+        self.settings = settings
 
         self.uid = self.settings.metagraph.hotkeys.index(
             self.settings.wallet.hotkey.ss58_address

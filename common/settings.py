@@ -18,8 +18,11 @@ class Settings:
     @classmethod
     def load_env_file(cls, role: str):
         env_file = f".env.{role}"
-        dotenv.load_dotenv(env_file)
-        logger.debug(f"Loaded {env_file} file")
+        try:
+            dotenv.load_dotenv(env_file)
+            logger.info(f"Loaded {env_file} file")
+        except Exception as e:
+            logger.error(f"Failed to load {env_file} file: {e}")
 
     @property
     def subtensor(self) -> Subtensor:
@@ -108,3 +111,5 @@ class Settings:
     def inspect(self):
         uids = self.metagraph.uids
         logger.info(f"Inspecting METAGRAPH UIDs: {uids}")
+
+settings = Settings()
