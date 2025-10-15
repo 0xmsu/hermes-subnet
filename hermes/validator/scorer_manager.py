@@ -33,15 +33,15 @@ class ScorerManager:
         miner_synapses: List[SyntheticNonStreamSynapse],
         challenge_id: str = ""
     ) -> Tuple[List[float], List[float], List[float]]:
-        ground_truth_scores = await asyncio.gather(
+        ground_truth_scores_raw = await asyncio.gather(
             *(self.cal_ground_truth_score(ground_truth, r) for r in miner_synapses)
         )
-        ground_truth_scores = [utils.fix_float(float(s)) for s in ground_truth_scores]
+        ground_truth_scores = [utils.fix_float(utils.safe_float_convert(s)) for s in ground_truth_scores_raw]
         elapse_time = [r.elapsed_time for r in miner_synapses]
         elapse_weights = [utils.fix_float(utils.get_elapse_weight_quadratic(r.elapsed_time, ground_cost)) for r in miner_synapses]
         zip_scores = [utils.fix_float(s * w) for s, w in zip(ground_truth_scores, elapse_weights)]
 
-        logger.info(f"[ScorerManager] - {challenge_id} ground_truth_scores: {ground_truth_scores}, elapse_time: {elapse_time}, elapse_weights: {elapse_weights}, zip_scores: {zip_scores}")
+        logger.info(f"[ScorerManager] - {challenge_id} ground_truth_scores: {ground_truth_scores_raw}, elapse_time: {elapse_time}, elapse_weights: {elapse_weights}, zip_scores: {zip_scores}")
         return zip_scores, ground_truth_scores, elapse_weights
 
     async def cal_ground_truth_score(self, ground_truth: str, miner_synapse: SyntheticNonStreamSynapse):

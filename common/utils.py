@@ -234,6 +234,12 @@ def format_openai_message(content: str, finish_reason=None) -> str:
 def fix_float(elapsed: float) -> float:
     return int(elapsed * 100) / 100
 
+def safe_float_convert(s: str) -> float:
+    try:
+        return float(s)
+    except Exception as e:
+        return 0.0
+
 def kill_process_group():
     try:
         os.killpg(os.getpgid(0), signal.SIGKILL)
