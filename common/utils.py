@@ -242,22 +242,41 @@ def format_openai_key() -> str:
         formatted_key = "****" if api_key else "Not Set"
     return formatted_key
 
-def extract_token_usage(messages: list[BaseMessage]) -> tuple[int, int]:
+def extract_token_usage(messages: list[BaseMessage]) -> tuple[int, int, int]:
     if not messages:
-        return 0, 0
-    
+        return 0, 0, 0
+
     if not isinstance(messages, list):
         messages = [messages]
     
     input_tokens = 0
+    input_cache_read_tokens = 0
     output_tokens = 0
 
     for m in messages:
         if hasattr(m, 'usage_metadata') and m.usage_metadata:
             usage = m.usage_metadata
             input_tokens += usage.get("input_tokens", 0)
+
+            input_token_details = usage.get("input_token_details", {})
+            input_cache_read_tokens += input_token_details.get("cache_read", 0)
+
             output_tokens += usage.get("output_tokens", 0)
-    return input_tokens, output_tokens
+    return input_tokens, input_cache_read_tokens, output_tokens
+
+def extract_tool_calls(messages: list[BaseMessage]) -> list[str]:
+    tool_calls = []
+    if not messages:
+        return tool_calls
+    for m in messages:
+        if hasattr(m, 'tool_calls') and len(m.tool_calls) > 0:
+            for tc in m.tool_calls:
+                t = {
+                    "name": tc.get("name"),
+                    "args": tc.get('args')
+                }
+                tool_calls.append(json.dumps(t))
+    return tool_calls
 
 def get_func_name(f):
     if hasattr(f, "__name__"):
@@ -320,7 +339,110 @@ def parse_time_range(time_range: str) -> int:
         cutoff_time = current_time - timedelta(hours=1)
         
     return int(cutoff_time.timestamp())
-            
+       
+def calculate_token_cost(
+    input_tokens: int, 
+    output_tokens: int, 
+    input_cache_tokens: int = 0,
+    model_name: str = "gpt-4o"
+) -> dict:
+    """
+    Calculate token costs based on OpenAI pricing models.
+    
+    Args:
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens  
+        input_cache_tokens: Number of cached input tokens (usually 50% discount)
+        model_name: OpenAI model name for pricing lookup
+        
+    Returns:
+        dict: Cost breakdown with total_cost, input_cost, cache_cost, output_cost, avg_token_price
+    """
+    
+    # OpenAI pricing per 1M tokens (USD) - updated 2024 pricing
+    pricing_table = {
+        "moonshotai/kimi-k2-0905": {"input": 0.6, "output": 2.50},
+        "zai-org/glm-4.6": {"input": 0.60, "output": 2.20, "input_cache": 0.0},
+        "gpt-5-mini": {"input": 0.25, "output": 2.00, "input_cache": 0.025},
+    }
+    
+    # Get pricing for the model, fallback to default if not found
+    pricing = pricing_table.get(model_name)
+    input_per_1m_price = pricing["input"]
+    output_per_1m_price = pricing["output"]
+    input_cache_1m_price = pricing.get("input_cache", 0.0)
+
+    # Calculate actual input tokens (excluding cache)
+    actual_input_tokens = input_tokens - input_cache_tokens
+    
+    # Calculate costs (prices are per 1M tokens)
+    input_cost = (actual_input_tokens / 1_000_000) * input_per_1m_price
+    cache_cost = 0 if input_cache_1m_price == 0 else (input_cache_tokens / 1_000_000) * input_cache_1m_price
+    output_cost = (output_tokens / 1_000_000) * output_per_1m_price
+    total_cost = input_cost + cache_cost + output_cost
+    
+    # Calculate average price per token
+    total_tokens = input_tokens + output_tokens
+    avg_token_price = total_cost / total_tokens if total_tokens > 0 else 0
+    
+    return {
+        "model_name": model_name,
+        "total_cost": round(total_cost, 8),
+        "input_cost": round(input_cost, 8),
+        "cache_cost": round(cache_cost, 8), 
+        "output_cost": round(output_cost, 8),
+        "avg_token_price": round(avg_token_price, 10),
+        "total_tokens": total_tokens,
+        "input_tokens": input_tokens,
+        "actual_input_tokens": actual_input_tokens,
+        "input_cache_tokens": input_cache_tokens,
+        "output_tokens": output_tokens,
+        "pricing_per_1m": {
+            "input": input_per_1m_price,
+            "output": output_per_1m_price
+        }
+    }
+
+def pick(obj: dict, keys: list) -> dict:
+    """
+    Create a new dictionary with only the specified keys from the original dictionary.
+    
+    Args:
+        obj: Source dictionary to pick from
+        keys: List of keys to include in the result
+        
+    Returns:
+        dict: New dictionary containing only the specified keys and their values
+        
+    Examples:
+        pick({"a": 1, "b": 2, "c": 3}, ["a", "c"]) -> {"a": 1, "c": 3}
+        pick({"x": 10, "y": 20}, ["x", "z"]) -> {"x": 10}
+    """
+    if not isinstance(obj, dict):
+        return {}
+    
+    return {key: obj[key] for key in keys if key in obj}
+
+def omit(obj: dict, keys: list) -> dict:
+    """
+    Create a new dictionary excluding the specified keys from the original dictionary.
+    
+    Args:
+        obj: Source dictionary to omit from
+        keys: List of keys to exclude from the result
+        
+    Returns:
+        dict: New dictionary without the specified keys
+        
+    Examples:
+        omit({"a": 1, "b": 2, "c": 3}, ["b"]) -> {"a": 1, "c": 3}
+        omit({"x": 10, "y": 20, "z": 30}, ["x", "z"]) -> {"y": 20}
+    """
+    if not isinstance(obj, dict):
+        return {}
+    
+    return {key: value for key, value in obj.items() if key not in keys}
+
 def kill_process_group():
     try:
         os.killpg(os.getpgid(0), signal.SIGKILL)
@@ -339,3 +461,39 @@ if __name__ == "__main__":
     print(get_elapse_weight_quadratic(20, ground_truth_cost))
     print(get_elapse_weight_quadratic(24, ground_truth_cost))
     print(get_elapse_weight_quadratic(30, ground_truth_cost))
+
+    # total_cost_info = calculate_token_cost(
+    #     input_tokens=72999,
+    #     output_tokens=800,
+    #     input_cache_tokens=0,
+    #     model_name='moonshotai/kimi-k2-0905'
+    # )
+    # logger.info(f"Total Token: {total_cost_info['total_tokens']}")
+    # logger.info(f"Total Cost: ${total_cost_info['total_cost']:.6f}")
+    # logger.info(f"Average Token Price: ${total_cost_info['avg_token_price']:.8f}")
+    # logger.info(f"Cost Breakdown - Input: ${total_cost_info['input_cost']:.6f}, Cache: ${total_cost_info['cache_cost']:.6f}, Output: ${total_cost_info['output_cost']:.6f}")
+
+    # total_cost_info = calculate_token_cost(
+    #     input_tokens=77732,
+    #     output_tokens=626,
+    #     input_cache_tokens=27468,
+    #     model_name='zai-org/glm-4.6'
+    # )
+    # logger.info(f"Total Token: {total_cost_info['total_tokens']}")
+    # logger.info(f"Total Cost: ${total_cost_info['total_cost']:.6f}")
+    # logger.info(f"Average Token Price: ${total_cost_info['avg_token_price']:.8f}")
+    # logger.info(f"Cost Breakdown - Input: ${total_cost_info['input_cost']:.6f}, Cache: ${total_cost_info['cache_cost']:.6f}, Output: ${total_cost_info['output_cost']:.6f}")
+
+
+    # total_cost_info = calculate_token_cost(
+    #     input_tokens=54770,
+    #     output_tokens=4279,
+    #     input_cache_tokens=38087,
+    #     model_name='gpt-5-mini'
+    # )
+    # logger.info(f"Total Token: {total_cost_info['total_tokens']}")
+    # logger.info(f"Total Cost: ${total_cost_info['total_cost']:.6f}")
+    # logger.info(f"Average Token Price: ${total_cost_info['avg_token_price']:.8f}")
+    # logger.info(f"Cost Breakdown - Input: ${total_cost_info['input_cost']:.6f}, Cache: ${total_cost_info['cache_cost']:.6f}, Output: ${total_cost_info['output_cost']:.6f}")
+
+

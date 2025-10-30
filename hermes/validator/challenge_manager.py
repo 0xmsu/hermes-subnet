@@ -126,6 +126,7 @@ class ChallengeManager:
                 asyncio.create_task(self.workload_manager.compute_organic_task()),
                 asyncio.create_task(self.set_weight()),
                 asyncio.create_task(self.challenge_loop()),
+                # asyncio.create_task(self.test_ground_truth_token()),
                 asyncio.create_task(self.refresh_agents()),
             ]
             await asyncio.gather(*self.task)
@@ -196,14 +197,9 @@ class ChallengeManager:
                             continue
 
 
-                        success, ground_truth, ground_cost = await self.generate_ground_truth(cid_hash, question, self.token_usage_metrics,  round_id=self.round_id)
+                        success, ground_truth, ground_cost, metrics_data = await self.generate_ground_truth(cid_hash, question, self.token_usage_metrics,  round_id=self.round_id)
 
                         is_valid = success and utils.is_ground_truth_valid(ground_truth)
-
-                        # question = 'What is the current circulating supply of the network’s native token?'
-                        # is_valid = True
-                        # ground_truth = 'tool: "graphql_schema_info"'
-                        # ground_cost = 4.5
 
                         # Create challenge table
                         table_formatter.create_synthetic_challenge_table(
@@ -213,7 +209,8 @@ class ChallengeManager:
                             question=question,
                             success=is_valid,
                             ground_truth=ground_truth,
-                            ground_cost=ground_cost
+                            ground_cost=ground_cost,
+                            metrics_data=utils.pick(metrics_data, ["phase", "input_tokens", "input_cache_read_tokens", "output_tokens", "timestamp", "round_id"])
                         )
 
                         if not is_valid:
@@ -223,7 +220,6 @@ class ChallengeManager:
                         # Valid challenge generated, break retry loop
                         challenge_generated = True
                         break
-
                     # Skip this project if all retries failed
                     if not challenge_generated:
                         logger.error(f"[ChallengeManager] - {cid_hash} Failed to generate valid challenge after {max_retries} attempts, skipping project")
@@ -296,26 +292,101 @@ class ChallengeManager:
             logger.error(f"[ChallengeManager] Challenge loop error: {e}\n{traceback.format_exc()}")
             raise
 
+    async def test_ground_truth_token(self):
+        try:
+            questions = [
+                'Which  indexer   currently  has the  highest  total stake  across  all their delegations?',
+                'What   is   the average   commission   rate  (as  a  percentage)  charged  by  indexers  who have updated their rates within the last 10 eras?',
+                'Which    deployment   has  received  the  highest  cumulative  consumer  boost in  net tokens added minus removed?',
+                # 'Which indexer currently has the highest total stake across all their delegations plus self-stake?'
+            ]
+            
+            projects = self.agent_manager.get_projects()
+
+            for cid_hash, project_config in projects.items():
+                logger.info(f"start testing: {cid_hash}")
+                
+                total_input_tokens = 0
+                total_input_cache_tokens = 0
+                total_output_tokens = 0
+
+                for q in questions:
+                    challenge_id = str(uuid4())
+                    success, ground_truth, ground_cost, metrics_data = await self.generate_ground_truth(cid_hash, q, self.token_usage_metrics,  round_id=self.round_id)
+
+                    is_valid = success and utils.is_ground_truth_valid(ground_truth)
+
+                    # Create challenge table
+                    table_formatter.create_synthetic_challenge_table(
+                        round_id=self.round_id,
+                        challenge_id=challenge_id,
+                        cid=cid_hash,
+                        question=q,
+                        success=is_valid,
+                        ground_truth=ground_truth,
+                        ground_cost=ground_cost,
+                        metrics_data=metrics_data
+                    )
+                    self.round_id += 1
+
+                    question_input = metrics_data.get("input_tokens", 0)
+                    question_cache = metrics_data.get("input_cache_read_tokens", 0)
+                    question_output = metrics_data.get("output_tokens", 0)
+                    
+                    total_input_tokens += question_input
+                    total_input_cache_tokens += question_cache
+                    total_output_tokens += question_output
+
+                    await asyncio.sleep(2)  # brief pause between questions
+
+                # calculate total cost for the project
+                total_cost_info = utils.calculate_token_cost(
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    input_cache_tokens=total_input_cache_tokens,
+                    model_name=self.llm_synthetic.model_name
+                )
+
+                logger.info(f"=== project {cid_hash} summary ===")
+                logger.info(f"Total Token: {total_cost_info['total_tokens']}")
+                logger.info(f"Input Token: {total_input_tokens} (Actual: {total_cost_info['actual_input_tokens']}, cache: {total_input_cache_tokens})")
+                logger.info(f"Output Token: {total_output_tokens}")
+                logger.info(f"Total Cost: ${total_cost_info['total_cost']:.6f}")
+                logger.info(f"Average Token Price: ${total_cost_info['avg_token_price']:.8f}")
+                logger.info(f"Cost Breakdown - Input: ${total_cost_info['input_cost']:.6f}, Cache: ${total_cost_info['cache_cost']:.6f}, Output: ${total_cost_info['output_cost']:.6f}")
+
+        except KeyboardInterrupt:
+            logger.info("[ChallengeManager] Challenge loop interrupted by user")
+            raise  # Re-raise to allow graceful shutdown
+        except Exception as e:
+            logger.error(f"[ChallengeManager] Challenge loop error: {e}\n{traceback.format_exc()}")
+            raise
+
     async def generate_ground_truth(
             self,
             cid_hash: str,
             question: str,
             token_usage_metrics: TokenUsageMetrics | None = None,
             round_id: int = 0
-        ) -> Tuple[bool, str | None, int]:
+        ) -> Tuple[bool, str | None, int, dict | None]:
         start_time = time.perf_counter()
         success = False
         result = None
+        metrics_data = None
         try:
             agent = self.agent_manager.get_graphql_agent(cid_hash)
             if not agent:
                 raise ValueError(f"No server agent found for cid: {cid_hash}")
 
-            response = await agent.query_no_stream(question, is_synthetic=True)
+            response = await agent.query_no_stream(question, prompt_cache_key=f"{cid_hash}_{start_time}", is_synthetic=True)
+
+            if os.getenv("LOG_GROUND_TRUTH", "").lower() == "true":
+                logger.info(f'------------------- Ground Truth Response for CID {cid_hash} ------------------ {response}')
+
             result = response.get('messages', [])[-1].content
 
             if token_usage_metrics is not None:
-                token_usage_metrics.append(cid_hash, phase=Phase.GENERATE_GROUND_TRUTH, response=response, extra = {"round_id": round_id})
+                metrics_data = token_usage_metrics.append(cid_hash, phase=Phase.GENERATE_GROUND_TRUTH, response=response, extra = {"round_id": round_id})
 
             if not result:
                 error = utils.try_get_invalid_tool_messages(response.get('messages', []))
@@ -337,7 +408,7 @@ class ChallengeManager:
                 raise
 
         finally:
-            return [success, result, utils.fix_float(time.perf_counter() - start_time)]
+            return [success, result, utils.fix_float(time.perf_counter() - start_time), metrics_data]
 
     async def query_miner(
         self,

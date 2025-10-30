@@ -111,23 +111,28 @@ class TokenUsageMetrics:
             extra: dict = {}
         ) -> dict[str, int]:
         extra_input_tokens = 0
+        extra_input_cache_read_tokens = 0
         extra_output_tokens = 0
 
         if isinstance(response, dict):
             messages = response.get('messages', [])
             extra_input_tokens = response.get('intermediate_graphql_agent_input_token_usage', 0)
+            extra_input_cache_read_tokens = response.get('intermediate_graphql_agent_input_cache_read_token_usage', 0)
             extra_output_tokens = response.get('intermediate_graphql_agent_output_token_usage', 0)
         else:
             messages = [response]
 
-        input_tokens, output_tokens = utils.extract_token_usage(messages)
-        logger.info(f"[TokenUsageMetrics] - append cid_hash: {cid_hash}, phase: {phase}, input_tokens: {input_tokens}, output_tokens: {output_tokens}, extra_input_tokens: {extra_input_tokens}, extra_output_tokens: {extra_output_tokens}")
+        input_tokens, input_cache_read_tokens, output_tokens = utils.extract_token_usage(messages)
+        tool_calls = utils.extract_tool_calls(messages)
+        logger.info(f"[TokenUsageMetrics] - append cid_hash: {cid_hash}, phase: {phase}, input_tokens: {input_tokens}, input_cache_read_tokens: {input_cache_read_tokens} output_tokens: {output_tokens}, extra_input_tokens: {extra_input_tokens}, extra_input_cache_read_tokens: {extra_input_cache_read_tokens}, extra_output_tokens: {extra_output_tokens}, tool_calls: {tool_calls}")
 
         data = {
             "cid_hash": cid_hash,
             "phase": phase.value,
             "input_tokens": input_tokens + extra_input_tokens,
+            "input_cache_read_tokens": input_cache_read_tokens + extra_input_cache_read_tokens,
             "output_tokens": output_tokens + extra_output_tokens,
+            "tool_calls": tool_calls,
             "timestamp":  int(datetime.now().timestamp())
         }
         data.update(extra)

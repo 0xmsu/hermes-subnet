@@ -196,5 +196,6 @@ class StatsMiddleware(BaseHTTPMiddleware):
 class ExtendedMessagesState(MessagesState):
     graphql_agent_hit: bool
     intermediate_graphql_agent_input_token_usage: int
+    intermediate_graphql_agent_input_cache_read_token_usage: int
     intermediate_graphql_agent_output_token_usage: int
 

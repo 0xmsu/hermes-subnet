@@ -167,7 +167,7 @@ class AgentManager:
 
                     logger.info(f" --------call_graphql_agent------ response: {response} ")
                     last = response['messages'][-1]
-                    input_token_usage, output_token_usage = utils.extract_token_usage(response['messages'][0: -1])
+                    input_token_usage, input_cache_read_token_usage, output_token_usage = utils.extract_token_usage(response['messages'][0: -1])
 
                     if not last.content:
                         error_msg = utils.try_get_invalid_tool_messages(last)
@@ -176,7 +176,8 @@ class AgentManager:
 
                     return {
                             "messages": [last], 
-                            "intermediate_graphql_agent_input_token_usage": input_token_usage, 
+                            "intermediate_graphql_agent_input_token_usage": input_token_usage,
+                            "intermediate_graphql_agent_input_cache_read_token_usage": input_cache_read_token_usage,
                             "intermediate_graphql_agent_output_token_usage": output_token_usage,
                             "graphql_agent_hit": True
                         }

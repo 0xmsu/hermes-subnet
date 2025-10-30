@@ -107,13 +107,15 @@ class TableFormatter:
         question: str,
         success: bool,
         ground_truth: str,
-        ground_cost: float
+        ground_cost: float,
+        metrics_data: dict | None = None
     ):
         header = "🤖 Synthetic Challenge" + f" ({round_id} | {challenge_id})"
         rows = [
             f"❓ Question: {question}\n",
             f"🎯 Ground Truth: {None if not success else ground_truth}\n",
-            # f"⚠️ {ground_truth}\n" if not success else "",
+            f"⚠️ {ground_truth}\n" if not success else "",
+            f"📊 Metrics Data: { metrics_data}\n" if metrics_data else "",
             f"⏱️ Cost: {ground_cost}s"
         ]
         challenge_output = self.create_single_column_table(

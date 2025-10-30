@@ -272,6 +272,30 @@ WORKFLOW:
 4. Execute queries with graphql_execute
 5. Provide clear, user-friendly summaries of the results
 
+
+    🚫 GraphQL Query Pagination Policy
+    If the query or question contains superlative terms (e.g., “highest”, “most”, “biggest”), and the GraphQL field being queried is plural, the query will automatically include first: 5 to limit results to the top 5 items.
+    When generating GraphQL queries, you must follow these strict rules:
+    1. Every field that supports pagination must include a first: parameter.
+    2. The value of first must always be ≤ 5, unless the user explicitly asks for a larger number.
+    3. This rule applies recursively, including all nested connection fields such as: nodes, edges, items, delegations, deploymentBoosterSummaries, etc.
+    4. You must never use first: 100 or any unbounded list field.
+
+    ❌ Bad Pagination Examples — These are strictly forbidden:
+    {{ indexers {{ nodes {{ id }}  }} }}
+    {{ indexers {{ delegations {{ nodes {{ id }} }}   }} }}
+    {{ indexers {{ delegations(first: 100) {{ nodes {{ id }} }} }} }}
+    {{ indexers(first: 100) {{ nodes {{ id }}  }} }}
+    {{ indexers(first: 100) {{ delegations {{ nodes {{ id }} }} }} }}
+    {{ indexers(first: 100) {{ delegations(first: 100) {{ nodes {{ id }} }}   }} }}
+    {{ indexer(id: xxx) {{ delegations {{ nodes {{ id }} }} }}
+    {{ indexer(id: xxx) {{ delegations(first: 100) {{ nodes {{ id }} }} }} }}
+    
+    ✅ Correct Pagination Examples — You must always follow this pattern:
+    {{ indexers(first: 5) {{ delegations(first: 5) {{ nodes {{ id }} }}   }} }}
+    {{ indexer(id: xxx) {{ delegations(first: 5) {{ nodes {{ id }}  }} }} }}
+
+    
 For missing user info (like "my rewards", "my tokens"), always ask for the specific wallet address or ID rather than fabricating data."""
     else:
         # For organic queries, use domain-based filtering
@@ -295,7 +319,9 @@ IF RELATED to {domain_name} data:
 For missing user info (like "my rewards", "my tokens"), always ask for the specific wallet address or ID rather than fabricating data."""
 
 
-
+a = '''
+The GraphQL query should only include fields that are directly relevant to the user's question. Unrelated fields Must not be queried.
+'''
 class GraphQLTypeDetailInput(BaseModel):
     """Input for GraphQL type detail tool."""
     type_name: str = Field(description="Name of the GraphQL type to examine")
@@ -477,7 +503,7 @@ class GraphQLQueryValidatorTool(BaseTool):
                 from loguru import logger
 
                 if validation_errors:
-                    logger.info(f"============================validattion error for query: {query}, {validation_errors}")
+                    logger.info(f"============================validation error for query: {query}, {validation_errors}")
 
                     error_messages = [error.message for error in validation_errors]
                     return f"❌ Schema validation failed:\n" + "\n".join([f"- {error}" for error in error_messages])
@@ -501,6 +527,29 @@ class GraphQLQueryValidatorAndExecutedTool(BaseTool):
     description: str = """
     Validate a GraphQL query string for syntax and basic structure and execute it if valid.
     Input: Pass the GraphQL query as plain text without any formatting.
+
+    🚫 GraphQL Query Pagination Policy
+    If the query or question contains superlative terms (e.g., “highest”, “most”, “biggest”), and the GraphQL field being queried is plural, the query will automatically include first: 5 to limit results to the top 5 items.
+    When generating GraphQL queries, you must follow these strict rules:
+    1. Every field that supports pagination must include a first: parameter.
+    2. The value of first must always be ≤ 5, unless the user explicitly asks for a larger number.
+    3. This rule applies recursively, including all nested connection fields such as: nodes, edges, items, delegations, deploymentBoosterSummaries, etc.
+    4. You must never use first: 100 or any unbounded list field.
+
+    ❌ Bad Pagination Examples — These are strictly forbidden:
+    { indexers { nodes { id }  } }
+    { indexers { delegations { nodes { id } } } }
+    { indexers { delegations(first: 100) { nodes { id } } } }
+    { indexers(first: 100) { nodes { id }  } }
+    { indexers(first: 100) { delegations { nodes { id } } } }
+    { indexers(first: 100) { delegations(first: 100) { nodes { id } }  } }
+    { indexer(id: xxx) { delegations { nodes { id }} } }
+    { indexer(id: xxx) { delegations(first: 100) { nodes { id } } } }
+    
+    ✅ Correct Pagination Examples — You must always follow this pattern:
+    { indexers(first: 5) { delegations(first: 5) { nodes { id } }  } }
+    { indexer(id: xxx) { delegations(first: 5) { nodes { id }  } } }
+
     
     CORRECT: { indexers(first: 1) { nodes { id } } }
     WRONG: `{ indexers(first: 1) { nodes { id } } }`
@@ -594,7 +643,7 @@ class GraphQLQueryValidatorAndExecutedTool(BaseTool):
                 validation_errors = validate(schema, document)
 
                 if validation_errors:
-                    logger.info(f"============================validattion error for query: {query}, {validation_errors}")
+                    logger.info(f"============================validation error for query: {query}, {validation_errors}")
                     error_messages = [error.message for error in validation_errors]
                     return f"❌ Schema validation failed:\n" + "\n".join([f"- {error}" for error in error_messages])
                 else:

@@ -252,7 +252,7 @@ class GraphQLAgent:
             prompt=prompt
         )
 
-    async def query_no_stream(self, question, is_synthetic: bool = False):
+    async def query_no_stream(self, question, prompt_cache_key: str = '', is_synthetic: bool = False):
         """Execute a non-streaming query.
 
         Args:
@@ -278,7 +278,8 @@ class GraphQLAgent:
             {"messages": [{"role": "user", "content": question}]},
             config={
                 "recursion_limit": 12,
-            }
+            },
+            prompt_cache_key=prompt_cache_key
         )
         return response
 
