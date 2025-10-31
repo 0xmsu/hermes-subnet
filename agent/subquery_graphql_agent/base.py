@@ -271,7 +271,7 @@ class GraphQLAgent:
         temp_executor = create_react_agent(
             model=self.llm,
             tools=self.tools,
-            prompt=prompt
+            prompt=prompt,
         )
 
         response = await temp_executor.ainvoke(

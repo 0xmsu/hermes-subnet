@@ -364,6 +364,7 @@ def calculate_token_cost(
         "moonshotai/kimi-k2-0905": {"input": 0.6, "output": 2.50},
         "zai-org/glm-4.6": {"input": 0.60, "output": 2.20, "input_cache": 0.0},
         "gpt-5-mini": {"input": 0.25, "output": 2.00, "input_cache": 0.025},
+        "gpt-5": {"input": 1.25, "output": 10, "input_cache": 0.125},
     }
     
     # Get pricing for the model, fallback to default if not found
@@ -495,5 +496,16 @@ if __name__ == "__main__":
     # logger.info(f"Total Cost: ${total_cost_info['total_cost']:.6f}")
     # logger.info(f"Average Token Price: ${total_cost_info['avg_token_price']:.8f}")
     # logger.info(f"Cost Breakdown - Input: ${total_cost_info['input_cost']:.6f}, Cache: ${total_cost_info['cache_cost']:.6f}, Output: ${total_cost_info['output_cost']:.6f}")
+
+    total_cost_info = calculate_token_cost(
+        input_tokens=60025,
+        output_tokens=338,
+        input_cache_tokens=20152,
+        model_name='zai-org/glm-4.6'
+    )
+    logger.info(f"Total Token: {total_cost_info['total_tokens']}")
+    logger.info(f"Total Cost: ${total_cost_info['total_cost']:.6f}")
+    logger.info(f"Average Token Price: ${total_cost_info['avg_token_price']:.10f}")
+    logger.info(f"Cost Breakdown - Input: ${total_cost_info['input_cost']:.6f}, Cache: ${total_cost_info['cache_cost']:.6f}, Output: ${total_cost_info['output_cost']:.6f}")
 
 
