@@ -75,7 +75,7 @@
                     </div>
                     <div class="card-body">
                         <div class="row mb-3">
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="card bg-primary text-white">
                                     <div class="card-body text-center">
                                         <h4 id="totalTokens">0</h4>
@@ -83,7 +83,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="card bg-success text-white">
                                     <div class="card-body text-center">
                                         <h4 id="totalInputTokens">0</h4>
@@ -91,7 +91,15 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
+                                <div class="card bg-secondary text-white">
+                                    <div class="card-body text-center">
+                                        <h4 id="totalInputCacheTokens">0</h4>
+                                        <small>Input Cache</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
                                 <div class="card bg-info text-white">
                                     <div class="card-body text-center">
                                         <h4 id="totalOutputTokens">0</h4>
@@ -99,11 +107,19 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="card bg-warning text-white">
                                     <div class="card-body text-center">
                                         <h4 id="totalRequests">0</h4>
                                         <small>Total Requests</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="card bg-dark text-white">
+                                    <div class="card-body text-center">
+                                        <h4 id="effectiveTokens">0</h4>
+                                        <small>Effective Tokens</small>
                                     </div>
                                 </div>
                             </div>
@@ -117,6 +133,7 @@
                                         <th>Project ID</th>
                                         <th>Round ID</th>
                                         <th>Input Tokens</th>
+                                        <th>Input Cache</th>
                                         <th>Output Tokens</th>
                                         <th>Total</th>
                                         <th>Details</th>
@@ -175,6 +192,7 @@
             
             // Calculate summary statistics
             let totalInputTokens = 0;
+            let totalInputCacheTokens = 0;
             let totalOutputTokens = 0;
             let totalRequests = tokenData.length;
             
@@ -190,6 +208,7 @@
                         project_id: projectId,
                         round_id: roundId,
                         input_tokens: 0,
+                        input_cache_tokens: 0,
                         output_tokens: 0,
                         phases: [],
                         latest_timestamp: 0
@@ -197,19 +216,26 @@
                 }
                 
                 projectGroups[groupKey].input_tokens += item.input_tokens || 0;
+                projectGroups[groupKey].input_cache_tokens += item.input_cache_read_tokens || 0;
                 projectGroups[groupKey].output_tokens += item.output_tokens || 0;
                 projectGroups[groupKey].phases.push(item);
                 projectGroups[groupKey].latest_timestamp = Math.max(projectGroups[groupKey].latest_timestamp, item.timestamp || 0);
                 
                 totalInputTokens += item.input_tokens || 0;
+                totalInputCacheTokens += item.input_cache_read_tokens || 0;
                 totalOutputTokens += item.output_tokens || 0;
             });
 
+            // Calculate effective tokens: input - input_cache + output
+            const effectiveTokens = totalInputTokens - totalInputCacheTokens + totalOutputTokens;
+            
             // Update summary cards
             document.getElementById('totalTokens').textContent = (totalInputTokens + totalOutputTokens).toLocaleString();
             document.getElementById('totalInputTokens').textContent = totalInputTokens.toLocaleString();
+            document.getElementById('totalInputCacheTokens').textContent = totalInputCacheTokens.toLocaleString();
             document.getElementById('totalOutputTokens').textContent = totalOutputTokens.toLocaleString();
             document.getElementById('totalRequests').textContent = totalRequests.toLocaleString();
+            document.getElementById('effectiveTokens').textContent = effectiveTokens.toLocaleString();
 
             // Sort groups by latest timestamp
             const sortedGroups = Object.entries(projectGroups).sort(
@@ -221,6 +247,7 @@
                 const row = tbody.insertRow();
                 const shortRoundId = data.round_id.length > 10 ? data.round_id.substring(0, 10) + '...' : data.round_id;
                 const timestamp = new Date(data.latest_timestamp * 1000);
+                const effectiveTotal = data.input_tokens - data.input_cache_tokens + data.output_tokens;
                 
                 row.innerHTML = `
                     <td>${timestamp.toLocaleString()}</td>
@@ -231,8 +258,9 @@
                         <code>${shortRoundId}</code>
                     </td>
                     <td><span class="badge bg-success">${data.input_tokens.toLocaleString()}</span></td>
+                    <td><span class="badge bg-secondary">${data.input_cache_tokens.toLocaleString()}</span></td>
                     <td><span class="badge bg-info">${data.output_tokens.toLocaleString()}</span></td>
-                    <td><strong>${(data.input_tokens + data.output_tokens).toLocaleString()}</strong></td>
+                    <td><strong>${effectiveTotal.toLocaleString()}</strong></td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary" onclick="showTokenDetails('${groupKey}')">
                             View (${data.phases.length})
@@ -251,18 +279,22 @@
 
             const content = document.getElementById('tokenDetailsContent');
             const phases = groupData.phases.sort((a, b) => b.timestamp - a.timestamp);
+            const effectiveTotal = groupData.input_tokens - groupData.input_cache_tokens + groupData.output_tokens;
             
             let html = `
                 <h6>Project: <code>${groupData.project_id}</code></h6>
                 <h6>Round ID: <code>${groupData.round_id}</code></h6>
                 <p><strong>Total Input Tokens:</strong> ${groupData.input_tokens.toLocaleString()} | 
+                   <strong>Input Cache:</strong> ${groupData.input_cache_tokens.toLocaleString()} |
                    <strong>Total Output Tokens:</strong> ${groupData.output_tokens.toLocaleString()} |
+                   <strong>Effective Total:</strong> ${effectiveTotal.toLocaleString()} |
                    <strong>Total Phases:</strong> ${phases.length}</p>
                 <hr>
             `;
 
             phases.forEach(phase => {
                 const timestamp = new Date(phase.timestamp * 1000);
+                const phaseEffective = (phase.input_tokens || 0) - (phase.input_cache_read_tokens || 0) + (phase.output_tokens || 0);
                 html += `
                     <div class="token-details">
                         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -270,17 +302,21 @@
                             <small>${timestamp.toLocaleString()}</small>
                         </div>
                         <div class="row">
-                            <div class="col-4">
+                            <div class="col-3">
                                 <small class="text-muted">Input Tokens:</small><br>
                                 <span class="badge bg-success">${(phase.input_tokens || 0).toLocaleString()}</span>
                             </div>
-                            <div class="col-4">
+                            <div class="col-3">
+                                <small class="text-muted">Input Cache:</small><br>
+                                <span class="badge bg-secondary">${(phase.input_cache_read_tokens || 0).toLocaleString()}</span>
+                            </div>
+                            <div class="col-3">
                                 <small class="text-muted">Output Tokens:</small><br>
                                 <span class="badge bg-info">${(phase.output_tokens || 0).toLocaleString()}</span>
                             </div>
-                            <div class="col-4">
-                                <small class="text-muted">Total:</small><br>
-                                <strong>${((phase.input_tokens || 0) + (phase.output_tokens || 0)).toLocaleString()}</strong>
+                            <div class="col-3">
+                                <small class="text-muted">Effective Total:</small><br>
+                                <strong>${phaseEffective.toLocaleString()}</strong>
                             </div>
                         </div>
                     </div>
