@@ -177,13 +177,16 @@ def select_uid(
         reverse=True
     )
     logger.info(f"synthetic_score: {synthetic_score}, available_miners: {available_miners}, available_success_rate_miners: {available_success_rate_miners}, sorted miners: {sorted_miners}, uid_select_count: {uid_select_count}")
-    for uid, hotkey in sorted_miners:
+    for uid, score in sorted_miners:
         if uid_select_count.get(uid, 0) < max_count:
             uid_select_count[uid] = uid_select_count.get(uid, 0) + 1
-            return uid, hotkey
+            return uid, score
     if sorted_miners:
-        uid_select_count[uid] = 1
-        return sorted_miners[0][0], sorted_miners[0][1]
+        selected_uid = sorted_miners[0][0]
+        selected_score = sorted_miners[0][1]
+        for uid, _ in sorted_miners:
+            uid_select_count[uid] = 1
+        return selected_uid, selected_score
 
     return None, None
 
