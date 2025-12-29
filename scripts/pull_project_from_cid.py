@@ -14,9 +14,17 @@ from common.settings import Settings
 
 # https://thegraph.com/explorer/subgraphs/HMuAwufqZ1YCRmzL2SfHTVkzZovC9VL2UAKhjvRqKiR1?view=Query&chain=arbitrum-one
 cid = 'QmeB7YfNvLbM9AnSVeh5JvsfUwm1KVCtUDwaDLh5oxupGh'
-
 # subgraph id
 endpoint = 'https://gateway.thegraph.com/api/subgraphs/id/HMuAwufqZ1YCRmzL2SfHTVkzZovC9VL2UAKhjvRqKiR1'
+
+
+# https://explorer.subquery.network/subquery/subquery/mainnet-vesting
+cid = 'QmP1hHmmYZ5uMj9zERr1bb5yKVDjPAwK5QK9BHergZpGaS'
+endpoint = 'https://index-api.onfinality.io/sq/subquery/mainnet-vesting'
+
+# https://explorer.subquery.network/subquery/subquery/airdrop-nft-backend
+cid = 'QmZKgAmBqa79sfKhGJTE1kRzQqEDwLShSDYTpkYeKEpeEU'
+endpoint = 'https://index-api.onfinality.io/sq/subquery/airdrop-nft-backend'
 
 
 # python -m scripts.pull_project_from_cid
