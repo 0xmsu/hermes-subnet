@@ -652,7 +652,6 @@ class GraphQLQueryValidatorAndExecutedTool(BaseTool):
     
     async def _execute(self, query: str, variables: Optional[Dict[str, Any]] = None) -> str:
         try:
-            logger.info(f"---------- Executing validated query: {query} with variables: {variables}")
             result = await self.graphql_source.execute_query(query, variables)
             if "errors" in result:
                 errors = result["errors"]
