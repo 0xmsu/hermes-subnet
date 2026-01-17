@@ -332,6 +332,7 @@ class ChallengeManager:
                         round_id=self.round_id,
                         challenge_id=challenge_id,
                         uids=uids,
+                        hotkeys=hotkeys,
                         responses=responses,
                         ground_truth_scores=ground_truth_scores,
                         elapse_weights=elapse_weights,

@@ -132,6 +132,7 @@ class TableFormatter:
         round_id: str,
         challenge_id: str,
         uids: list[int],
+        hotkeys: list[str],
         responses: list[bt.Synapse],
         ground_truth_scores: list[float],
         elapse_weights: list[float],
@@ -142,17 +143,17 @@ class TableFormatter:
         header = "🤖 Synthetic Challenge" + f" ({round_id} | {challenge_id})"
         rows = []
 
-        # Separate successful and failed responses
-        successful_indices = []
+        # Separate serving and failed responses
+        serving_indices = []
         failed_indices = []
         for idx, r in enumerate(responses):
-            (successful_indices if r.is_success else failed_indices).append(idx)
-        
+            (serving_indices if hotkeys[idx] else failed_indices).append(idx)
+
         # Prioritize successful responses
-        prioritized_indices = successful_indices + failed_indices
+        prioritized_indices = serving_indices + failed_indices
         limited_indices = prioritized_indices[:max_table_rows] if max_table_rows > 0 else prioritized_indices
         
-        for idx in enumerate(limited_indices):
+        for idx in limited_indices:
             uid = uids[idx]
             r = responses[idx]
             rstr = None
